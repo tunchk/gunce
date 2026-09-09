@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gunce-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gunce
+      POSTGRES_PASSWORD: gunce
+      POSTGRES_DB: gunce
+    ports:
+      - "5432:5432"
+    volumes:
+      - gunce_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gunce -d gunce"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  gunce_pgdata:

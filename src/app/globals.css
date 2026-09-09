@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+:root {
+  --bg-top: #e8f3ef;
+  --bg-bottom: #f7f1e8;
+  --ink: #1c2a24;
+  --muted: #4d5c55;
+  --accent: #0f7a5f;
+  --accent-soft: #d7efe6;
+  --warn: #b45309;
+  --danger: #b42318;
+  --surface: rgba(255, 255, 255, 0.72);
+  --line: rgba(28, 42, 36, 0.12);
+  --shadow: 0 18px 50px rgba(28, 42, 36, 0.08);
+  --radius: 1.25rem;
+  --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", serif;
+  --font-body: "Source Sans 3", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  color: var(--ink);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(circle at top left, rgba(15, 122, 95, 0.16), transparent 42%),
+    radial-gradient(circle at bottom right, rgba(180, 83, 9, 0.12), transparent 40%),
+    linear-gradient(165deg, var(--bg-top), var(--bg-bottom));
+  background-attachment: fixed;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(15, 122, 95, 0.45);
+  outline-offset: 2px;
+}

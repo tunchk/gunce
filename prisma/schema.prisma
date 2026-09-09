@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  PARENT
+  CHILD
+}
+
+enum AgeGroup {
+  AGE_9_11
+  AGE_12_14
+}
+
+enum ParentOnboardingStep {
+  CHILD_PROFILE
+  EXPLANATION
+  PAIRING
+  COMPLETE
+}
+
+enum ChildOnboardingStep {
+  AVATAR
+  EXPLANATION
+  COMPLETE
+}
+
+enum JournalPrompt {
+  LIKED
+  HARD
+  LEARNED
+  TODO
+  FREE
+}
+
+enum JournalEntryStatus {
+  DRAFT
+  SAVED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  role          UserRole  @default(PARENT)
+
+  sessions Session[]
+  accounts Account[]
+
+  memberships         FamilyMembership[]
+  createdInvitations  PairingInvitation[] @relation("InvitationCreator")
+  childProfile        ChildProfile?
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Family {
+  id             String              @id @default(cuid())
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  onboardingStep ParentOnboardingStep @default(CHILD_PROFILE)
+
+  members  FamilyMembership[]
+  children ChildProfile[]
+}
+
+model FamilyMembership {
+  id        String   @id @default(cuid())
+  familyId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, userId])
+  @@unique([userId])
+  @@index([familyId])
+}
+
+model ChildProfile {
+  id               String              @id @default(cuid())
+  familyId         String
+  displayName      String
+  ageGroup         AgeGroup
+  timeZone         String
+  avatarKey        String?
+  onboardingStep   ChildOnboardingStep @default(AVATAR)
+  userId           String?             @unique
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  family      Family              @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  invitations PairingInvitation[]
+  journalEntries JournalEntry[]
+  publishedShares PublishedShare[]
+
+  @@index([familyId])
+}
+
+model PairingInvitation {
+  id              String    @id @default(cuid())
+  childId         String
+  createdByUserId String
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  redeemedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  child     ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  createdBy User         @relation("InvitationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+  @@index([expiresAt])
+}
+
+model RateLimitBucket {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  count       Int      @default(0)
+  windowStart DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Private writing owned exclusively by the child. Never returned by parent APIs.
+model JournalEntry {
+  id              String             @id @default(cuid())
+  childId         String
+  promptKey       JournalPrompt?
+  /// Calendar date in the child's configured time zone (UTC midnight of that date).
+  diaryDate       DateTime           @db.Date
+  body            String             @default("")
+  status          JournalEntryStatus @default(DRAFT)
+  revision        Int                @default(1)
+  /// Optional client key so create retries do not insert duplicates.
+  clientRequestId String?            @unique
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  child     ChildProfile   @relation(fields: [childId], references: [id], onDelete: Cascade)
+  draft     SharingDraft?
+  published PublishedShare?
+
+  @@index([childId, diaryDate])
+  @@index([childId, updatedAt])
+}
+
+/// Editable parent-facing draft, independent of private journal body.
+model SharingDraft {
+  id             String   @id @default(cuid())
+  entryId        String   @unique
+  parentMessage  String   @default("")
+  supportRequest String   @default("")
+  revision       Int      @default(1)
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  entry JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+}
+
+/// Snapshot approved by the child for parent visibility. Soft-withdrawn via withdrawnAt.
+model PublishedShare {
+  id                  String    @id @default(cuid())
+  entryId             String    @unique
+  childId             String
+  familyId            String
+  parentMessage       String    @default("")
+  supportRequest      String    @default("")
+  sourceDraftRevision Int
+  publishedAt         DateTime  @default(now())
+  withdrawnAt         DateTime?
+
+  entry JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  child ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([familyId, withdrawnAt, publishedAt])
+  @@index([childId, withdrawnAt])
+}
