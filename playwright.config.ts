@@ -44,6 +44,10 @@ export default defineConfig({
       BETTER_AUTH_SECRET,
       BETTER_AUTH_URL: baseURL,
       NEXT_PUBLIC_APP_URL: baseURL,
+      // Deterministic transcription/summary stubs for the local Playwright server only.
+      // GUNCE_ALLOW_AI_TEST_STUBS is required because `next start` uses NODE_ENV=production.
+      GUNCE_AI_TEST_MODE: "1",
+      GUNCE_ALLOW_AI_TEST_STUBS: "1",
     },
   },
 });

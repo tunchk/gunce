@@ -3,7 +3,8 @@
 Uygulama çocuklar (9–14) ve velileri için: gününü anlat, haftanı birlikte düzenle.
 
 **Kilometre taşı 1:** hesaplar, yetkilendirme, onboarding, eşleştirme.  
-**Kilometre taşı 2:** metin günlüğü ve çocuğun kontrolünde veli paylaşımı (yapay zekâ / ses / plan yok).
+**Kilometre taşı 2:** metin günlüğü ve çocuğun kontrolünde veli paylaşımı.  
+**Kilometre taşı 3:** sesle anlatım (yazıya çevirme) ve çocuğun gözden geçirdiği yapay zekâ özeti.
 
 Ürün: [`docs/product.md`](docs/product.md) · Mimari: [`docs/architecture.md`](docs/architecture.md)
 
@@ -24,8 +25,15 @@ cp .env.example .env
 | `BETTER_AUTH_SECRET` | Uzun rastgele gizli anahtar (`openssl rand -base64 32`) |
 | `BETTER_AUTH_URL` | Uygulama kök URL’si (`http://localhost:3000`) |
 | `NEXT_PUBLIC_APP_URL` | İstemci tabanlı URL (`http://localhost:3000`) |
+| `OPENAI_API_KEY` | (İsteğe bağlı) Ses yazıya çevirme ve özet; yoksa günlük yazma çalışır, ses/özet “kullanılamıyor” olur |
+| `OPENAI_TRANSCRIBE_MODEL` | Varsayılan: `gpt-transcribe` |
+| `OPENAI_SUMMARY_MODEL` | Varsayılan: `gpt-4o-mini` |
+| `GUNCE_AI_TEST_MODE` | Yalnızca otomatik testler; gerçek uygulamada / üretimde kullanma |
+| `GUNCE_ALLOW_AI_TEST_STUBS` | `NODE_ENV=production` iken stub için ek anahtar (yalnızca Playwright); üretim host’una koyma |
 
 Testler yalnızca `gunce_test` kullanır.
+
+**Geliştirme notu:** Veli kaydında e-posta doğrulanmış sayılmaz (`emailVerified=false`). Yerel giriş doğrulama olmadan çalışır; tam doğrulama akışı bu kilometre taşında yok.
 
 ## PostgreSQL (Homebrew — önerilen)
 
@@ -58,25 +66,44 @@ npx prisma migrate deploy
 npm run dev
 ```
 
-Yeni günlük migrasyonu: `20260909155123_journal_sharing` ( `migrate deploy` ile uygulanır ).
+Ses/özet migrasyonu: `20260909180000_voice_summary`.
 
 ```bash
 npm run typecheck
 npm run build
 npm test
-npm run build && npm run test:e2e   # Playwright; Chromium gerekir
+npm run build && npm run test:e2e   # Playwright; Chromium gerekir; GUNCE_AI_TEST_MODE stub’ları kullanır
 ```
 
 ## Manuel deneme (ayrı oturumlar)
 
 1. Veli kaydı → çocuk profili → davet kodu.
 2. Ayrı profil/cihazda çocuk eşleştirmesi ve onboarding.
-3. Çocuk: **Günümü anlat** → yaz → **Kaydet (bende kalsın)** → **Paylaşımı hazırla** → veli mesajı ve/veya destek isteği → **Paylaş**.
-4. Veli ana ekranında yalnızca paylaşılan metni gör; özel günlük görünmez.
-5. Çocuk: **Paylaşımı geri çek** → veli yenileyince içerik kaybolur.
+3. Çocuk: **Günümü anlat** → konu seç → yaz (veya mikrofon; `OPENAI_API_KEY` gerekir). Uzun anlatımda her bölüm ~120 sn; uyarıdan sonra **Devam et** / **Bitirdim**. Çözümü gözden geçir → **Yazımı toparla** → öneriyi düzenle/kabul et → **Kaydet (bende kalsın)**.
+4. İstersen **Paylaşımı hazırla** → **Özetimden kopyala** → önizle → **Paylaş** (otomatik paylaşılmaz).
+5. Veli ana ekranında yalnızca yayınlanan anlık görüntüyü gör; özel metin / transkript / öneri görünmez.
+6. **Paylaşımı geri çek** → velinin uygulamada görmesi durur; daha önce okunan bilgi geri alınamaz.
+
+### Mikrofon (manuel kontrol listesi)
+
+- Açıklama, izin istemeden önce görünür mü?
+- Yalnızca açık eylemle kayıt başlıyor mu? Durdur / bu bölümü iptal / **Devam et** / **Bitirdim**?
+- Bölüm sonu uyarısı (“Bu bölüm birazdan bitecek…”) ve otomatik yeniden başlatma **yok** mu?
+- Başarısız bölüm: yeniden dene / atla; tamamlananlar korunuyor mu?
+- İşlenmemiş ses sayfa yenilemede kaybolur (bilinçli sınır); kaydedilmiş yazı durur mu?
+- Transkript sessizce üzerine yazmıyor; ekle / yerine koy açık mı?
+
+Gerçek iPhone Safari / Android mikrofon uyumu yalnızca gerçek cihazda doğrulanır; Playwright simülasyonu bunun yerine geçmez.
+
+## Sağlayıcı verisi
+
+Ses ve metin, yapılandırılmış OpenAI uç noktalarına gönderilir. Uygulama ses dosyasını saklamaz. Sağlayıcının veriyi ne kadar tuttuğu OpenAI politikasına bağlıdır; bu depoda “saklamaz” iddiası yoktur.
 
 ## Bilinen sınırlamalar
 
-- Yapay zekâ özeti, ses, haftalık plan, hedefler, bildirimler **yok**.
+- Haftalık plan, hedefler, bildirimler, duygu skoru, genel sohbet botu **yok**.
 - E-posta doğrulama ve şifre sıfırlama **yok**.
+- Canlı OpenAI çağrıları anahtar olmadan doğrulanmaz; testler deterministik stub kullanır.
+- Çok bölümlü seste işlenmemiş ses yalnızca bellektemedir; yenileme / sekme kapatma / çökmede kaybolur.
+- Anlatım oturumu en fazla 12 bölüm (bölüm başı ~120 sn); görünmez arka plan dilimleme yok.
 - Rate limit uygulama/DB düzeyinde; üretimde ek kenar koruması önerilir.

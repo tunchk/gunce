@@ -241,7 +241,7 @@ export async function redeemPairingInvitation(input: {
       data: {
         name: child.displayName,
         email,
-        emailVerified: true,
+        emailVerified: false,
         role: "CHILD",
       },
     });

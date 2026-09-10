@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { DeleteEntryButton } from "@/components/delete-entry-button";
 import { JournalEditor } from "@/components/journal-editor";
 import { Button, Panel, Shell } from "@/components/ui";
+import { getAiFeatureStatus } from "@/lib/ai";
 import { PROMPT_OPTIONS } from "@/lib/constants";
 import { getChildEntry, JournalError } from "@/lib/journal";
 import { getAppSession, getChildProfileForUser } from "@/lib/session";
@@ -25,6 +26,7 @@ export default async function JournalEntryPage({ params }: Props) {
   }
 
   const prompt = PROMPT_OPTIONS.find((p) => p.key === entry.promptKey);
+  const features = getAiFeatureStatus();
 
   return (
     <Shell
@@ -33,7 +35,14 @@ export default async function JournalEntryPage({ params }: Props) {
     >
       <div className="space-y-4">
         <Panel>
-          <JournalEditor entryId={entry.id} initial={entry} />
+          <JournalEditor
+            entryId={entry.id}
+            initial={entry}
+            features={{
+              transcriptionAvailable: features.transcriptionAvailable,
+              summarizationAvailable: features.summarizationAvailable,
+            }}
+          />
         </Panel>
 
         <Link href={`/cocuk/gunluk/${entry.id}/paylas`}>

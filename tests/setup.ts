@@ -56,6 +56,9 @@ beforeEach(async () => {
     );
   }
 
+  await prisma.parentGuidance.deleteMany();
+  await prisma.journalSuggestion.deleteMany();
+  await prisma.journalTranscript.deleteMany();
   await prisma.publishedShare.deleteMany();
   await prisma.sharingDraft.deleteMany();
   await prisma.journalEntry.deleteMany();

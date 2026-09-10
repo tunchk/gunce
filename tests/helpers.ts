@@ -23,7 +23,7 @@ export async function createParent(input?: {
     data: {
       name,
       email,
-      emailVerified: true,
+      emailVerified: false,
       role: "PARENT",
     },
   });

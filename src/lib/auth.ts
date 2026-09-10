@@ -19,6 +19,9 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
+    // No email verification flow in this milestone. Parents can register and
+    // sign in with emailVerified remaining false (schema default). Do not set
+    // emailVerified=true unless a real verification succeeds in a later milestone.
   },
   user: {
     additionalFields: {

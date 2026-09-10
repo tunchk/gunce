@@ -28,25 +28,39 @@ Children describe their day by voice or text, edit the resulting summary, manage
 
 ## Milestone 2 — Text journaling and child-controlled sharing
 
-**Status: implemented in this repository (no AI / no voice).**
+**Status: implemented.**
 
 - Child writes about their day with optional prompts
 - Private journal entry separate from parent-facing draft and published snapshot
 - Optional support request (can be shared without sharing the journal body)
 - Draft autosave with revision checks
 - Explicit share / update share / withdraw share / delete
-- Parent home shows only published messages and support requests
+- Parent home shows excerpts of published messages with **Detayı gör**
+- Parent detail shows the full approved message, the child’s support request, and labeled AI approach tips based only on published content
+- Pairing and session management live under **Aile ayarları**
 - Parents cannot edit child content; private text never appears in parent APIs or page data
+- Withdrawal hides content from the app for the parent going forward; it cannot undo something already read. Republishing remains possible.
 
-**Out of scope for Milestone 2 (future):** AI summarization, voice input, weekly planning, goals, notifications.
+## Milestone 3 — Voice-assisted journaling and child-reviewed AI summaries
 
-## Milestone 3 — Weekly planning (planned)
+**Status: implemented in this repository.**
+
+- Child chooses a prompt → types and/or records voice → reviews transcript → optionally requests “Yazımı toparla” → edits/accepts/discards the suggestion → saves privately → optional existing explicit sharing flow
+- Browser audio capture only after an explicit child action; microphone purpose explained first
+- Server-side transcription (OpenAI Audio Transcriptions); audio is not stored in the app database, object storage, logs, or analytics
+- AI summaries are optional, separate from original text, labeled “Önerilen özet,” tied to a source revision, and never auto-publish
+- Accepting a summary does not share with the parent; child may copy accepted summary into the sharing draft, then publish with the existing confirmation
+- Failures leave private journaling usable; typed input remains available when voice/AI is unconfigured
+
+**Out of scope for Milestone 3 (future):** weekly planning, tasks, goals, notifications, emotional scoring, general-purpose chatbot, full email verification / password recovery.
+
+## Milestone 4 — Weekly planning (planned)
 
 - “Haftama bak” and “Sıradaki adımım”
 - Child-managed weekly plans
 - Parent visibility of plan items the child adds (per product rules)
 
-## Milestone 4 — Goals and parent support (planned)
+## Milestone 5 — Goals and parent support (planned)
 
 - Longer-term learning goals
 - Richer parent support views based on permitted shared data
@@ -58,6 +72,7 @@ Children describe their day by voice or text, edit the resulting summary, manage
 - Never trust client-supplied `familyId`, `childId`, or role as authorization evidence
 - No role-switch control that lets a child enter the parent area
 - Minimize data collected (no exact birth date, school name, or home address in onboarding)
-- Private journal text is never logged or exposed to parents
+- Private journal text, audio, transcripts, and AI suggestions are never logged or exposed to parents automatically
 - All user-facing interface text in Turkish
 - Mobile-first, large touch targets, accessible forms
+- Do not claim external provider retention policies unless independently verified

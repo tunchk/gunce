@@ -15,6 +15,13 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
   const [error, setError] = useState<string | undefined>();
   const [pending, setPending] = useState(false);
 
+  const hasSummary = Boolean(initial.acceptedSummary?.trim());
+  const hasOriginal = Boolean(
+    (initial.originalBody?.trim() || initial.body?.trim()) &&
+      (initial.originalBody.trim() || initial.body) !== initial.acceptedSummary.trim(),
+  );
+  const originalText = initial.originalBody.trim() || initial.body;
+
   async function patch(op: string, extra: Record<string, unknown> = {}) {
     setPending(true);
     setError(undefined);
@@ -58,7 +65,6 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
   }
 
   async function publish() {
-    // Save draft first so publish uses latest text
     const saved = await patch("update_draft", {
       parentMessage,
       supportRequest,
@@ -69,9 +75,7 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
       expectedDraftRevision: saved.draft.revision,
     });
     if (entry) {
-      setMessage(
-        published ? "Paylaşım güncellendi." : "Velinle paylaşıldı.",
-      );
+      setMessage(published ? "Paylaşım güncellendi." : "Velinle paylaşıldı.");
     }
   }
 
@@ -79,14 +83,25 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
     const entry = await patch("withdraw");
     if (entry) {
       setMessage(
-        "Paylaşım geri çekildi. Uygulamada velin artık göremez; daha önce okuduysa onu geri alamayız.",
+        "Paylaşımı geri çektiğinde velin bu içeriği artık uygulamada göremez. Daha önce okumuş olduğu bilgiyi geri alamayız.",
       );
     }
   }
 
-  function copyFromJournal() {
+  function copySummary() {
+    if (!hasSummary) return;
+    setParentMessage(initial.acceptedSummary);
+    setMessage("Kabul ettiğin özet taslağa kopyalandı. İstersen düzenle, sonra Paylaş’a bas.");
+  }
+
+  function copyOriginal() {
+    setParentMessage(originalText);
+    setMessage("Orijinal yazın taslağa kopyalandı. İstersen düzenle, sonra Paylaş’a bas.");
+  }
+
+  function copyCurrentBody() {
     setParentMessage(initial.body);
-    setMessage("Yazından kopyalandı. İstersen düzenleyebilirsin.");
+    setMessage("Şu anki yazın taslağa kopyalandı. İstersen düzenle, sonra Paylaş’a bas.");
   }
 
   const previewMessage = parentMessage.trim();
@@ -102,22 +117,53 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
         >
           {initial.body.trim() || "(Henüz özel yazı yok)"}
         </p>
+        {hasSummary && initial.acceptedSummary.trim() !== initial.body.trim() ? (
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Kabul ettiğin özet ayrı duruyor; veli otomatik görmez.
+          </p>
+        ) : null}
       </section>
 
       <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Velimin göreceği</h2>
-          <button
-            type="button"
-            onClick={copyFromJournal}
-            className="text-sm font-semibold underline"
-            style={{ color: "var(--accent)" }}
-          >
-            Yazımdan kopyala
-          </button>
+        <h2 className="text-lg font-semibold">Velimin göreceği</h2>
+        <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+          Aşağıya ne yazarsan (veya kopyalarsan) yalnızca onu paylaşabilirsin. Kısa bir cümle de olur;
+          önizlemede tam olarak ne gideceğini gör.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {hasSummary ? (
+            <button
+              type="button"
+              onClick={copySummary}
+              className="inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
+              style={{ background: "var(--accent-soft)" }}
+            >
+              Özetimden kopyala
+            </button>
+          ) : null}
+          {hasOriginal || originalText.trim() ? (
+            <button
+              type="button"
+              onClick={copyOriginal}
+              className="inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
+              style={{ border: "1px solid var(--line)" }}
+            >
+              Orijinal yazımdan kopyala
+            </button>
+          ) : null}
+          {!hasSummary ? (
+            <button
+              type="button"
+              onClick={copyCurrentBody}
+              className="inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
+              style={{ border: "1px solid var(--line)" }}
+            >
+              Yazımdan kopyala
+            </button>
+          ) : null}
         </div>
         <label className="block" htmlFor="parent-message">
-          <span className="mb-1.5 block text-sm font-semibold">Veli mesajı (isteğe bağlı)</span>
+          <span className="mb-1.5 block text-sm font-semibold">Veli mesajı</span>
           <textarea
             id="parent-message"
             value={parentMessage}
@@ -139,19 +185,19 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
             maxLength={4000}
             className="w-full rounded-2xl border p-3 text-base"
             style={{ borderColor: "var(--line)", background: "white" }}
-            placeholder="Velinden ne konusunda destek istersin?"
+            placeholder="Velinden ne konuda destek istersin?"
           />
         </label>
-        <p className="text-sm" style={{ color: "var(--muted)" }}>
-          Destek isteğini, günlük yazının tamamını paylaşmadan da gönderebilirsin.
-        </p>
       </section>
 
       <section
         className="space-y-2 rounded-2xl p-4"
         style={{ background: "var(--accent-soft)", border: "1px solid var(--line)" }}
       >
-        <h3 className="font-semibold">Önizleme</h3>
+        <h3 className="font-semibold">Velin şunu görecek</h3>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          Paylaş’a basınca yalnızca bu önizleme gider. Özel günlüğün otomatik gitmez.
+        </p>
         {!previewMessage && !previewSupport ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>
             Henüz paylaşılacak bir metin yok.
@@ -160,18 +206,18 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
           <>
             {previewMessage ? (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+                <p className="text-xs font-semibold" style={{ color: "var(--muted)" }}>
                   Mesaj
                 </p>
-                <p className="whitespace-pre-wrap text-sm">{previewMessage}</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm">{previewMessage}</p>
               </div>
             ) : null}
             {previewSupport ? (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              <div className="mt-2">
+                <p className="text-xs font-semibold" style={{ color: "var(--muted)" }}>
                   Destek isteği
                 </p>
-                <p className="whitespace-pre-wrap text-sm">{previewSupport}</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm">{previewSupport}</p>
               </div>
             ) : null}
           </>
@@ -180,7 +226,7 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
 
       {published?.hasUnpublishedChanges ? (
         <p className="text-sm font-semibold" style={{ color: "var(--warn)" }} role="status">
-          Yayında olan içerikten farklı değişikliklerin var. Velinin görmesi için “Paylaşımı güncelle”ye bas.
+          Yayındaki içerikten farklı değişikliklerin var. Velinin görmesi için “Paylaşımı güncelle”ye bas.
         </p>
       ) : null}
 

@@ -44,6 +44,9 @@ export async function wipe() {
     throw new Error(`Refuse wipe on ${rows[0]?.db}`);
   }
 
+  await prisma.parentGuidance.deleteMany();
+  await prisma.journalSuggestion.deleteMany();
+  await prisma.journalTranscript.deleteMany();
   await prisma.publishedShare.deleteMany();
   await prisma.sharingDraft.deleteMany();
   await prisma.journalEntry.deleteMany();

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import {
+  acceptSummarySuggestion,
+  applyTranscriptToEntry,
   deleteJournalEntry,
+  discardSummarySuggestion,
   getChildEntry,
   JournalError,
   publishShare,
@@ -79,6 +82,11 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
     parentMessage?: string;
     supportRequest?: string;
     expectedDraftRevision?: number;
+    suggestionId?: string;
+    editedText?: string;
+    transcript?: string;
+    mode?: string;
+    skipTranscriptRow?: boolean;
   };
   try {
     body = await request.json();
@@ -131,6 +139,53 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
       const entry = await withdrawShare({
         childUserId: authz.session!.user.id,
         entryId: id,
+      });
+      return NextResponse.json({ entry }, { headers: NO_STORE });
+    }
+
+    if (body.op === "apply_transcript") {
+      if (typeof body.expectedRevision !== "number" || typeof body.transcript !== "string") {
+        return NextResponse.json(
+          { error: "transcript ve expectedRevision gerekli." },
+          { status: 400, headers: NO_STORE },
+        );
+      }
+      const entry = await applyTranscriptToEntry({
+        childUserId: authz.session!.user.id,
+        entryId: id,
+        transcriptText: body.transcript,
+        expectedRevision: body.expectedRevision,
+        mode: body.mode === "replace" ? "replace" : "append",
+        skipTranscriptRow: body.skipTranscriptRow === true,
+      });
+      return NextResponse.json({ entry }, { headers: NO_STORE });
+    }
+
+    if (body.op === "accept_suggestion") {
+      if (typeof body.expectedRevision !== "number" || typeof body.suggestionId !== "string") {
+        return NextResponse.json(
+          { error: "suggestionId ve expectedRevision gerekli." },
+          { status: 400, headers: NO_STORE },
+        );
+      }
+      const entry = await acceptSummarySuggestion({
+        childUserId: authz.session!.user.id,
+        entryId: id,
+        suggestionId: body.suggestionId,
+        expectedRevision: body.expectedRevision,
+        editedText: body.editedText,
+      });
+      return NextResponse.json({ entry }, { headers: NO_STORE });
+    }
+
+    if (body.op === "discard_suggestion") {
+      if (typeof body.suggestionId !== "string") {
+        return NextResponse.json({ error: "suggestionId gerekli." }, { status: 400, headers: NO_STORE });
+      }
+      const entry = await discardSummarySuggestion({
+        childUserId: authz.session!.user.id,
+        entryId: id,
+        suggestionId: body.suggestionId,
       });
       return NextResponse.json({ entry }, { headers: NO_STORE });
     }

@@ -43,6 +43,13 @@ enum JournalEntryStatus {
   SAVED
 }
 
+enum SuggestionStatus {
+  PENDING
+  ACCEPTED
+  DISCARDED
+  STALE
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String
@@ -182,7 +189,12 @@ model JournalEntry {
   promptKey       JournalPrompt?
   /// Calendar date in the child's configured time zone (UTC midnight of that date).
   diaryDate       DateTime           @db.Date
+  /// Current working text (typed, reviewed transcript, or accepted summary).
   body            String             @default("")
+  /// Preserved child-authored / reviewed text before accepting a summary.
+  originalBody    String             @default("")
+  /// Last accepted AI summary text (private). Empty if none accepted.
+  acceptedSummary String             @default("")
   status          JournalEntryStatus @default(DRAFT)
   revision        Int                @default(1)
   /// Optional client key so create retries do not insert duplicates.
@@ -190,12 +202,52 @@ model JournalEntry {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
-  child     ChildProfile   @relation(fields: [childId], references: [id], onDelete: Cascade)
-  draft     SharingDraft?
-  published PublishedShare?
+  child       ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+  draft       SharingDraft?
+  published   PublishedShare?
+  transcripts JournalTranscript[]
+  suggestions JournalSuggestion[]
 
   @@index([childId, diaryDate])
   @@index([childId, updatedAt])
+}
+
+/// Text-only transcript of a voice capture. Audio is never stored.
+model JournalTranscript {
+  id             String   @id @default(cuid())
+  entryId        String
+  text           String
+  /// Entry revision at the time the transcript was applied to the body (0 if pending review).
+  sourceRevision Int      @default(0)
+  /// Client-stable id so retries do not create duplicate segment rows.
+  segmentId      String?  @unique
+  /// 1-based order within a recording session.
+  sequence       Int      @default(1)
+  /// Groups segments from one multi-part recording session.
+  sessionId      String?
+  createdAt      DateTime @default(now())
+
+  entry JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId, createdAt])
+  @@index([entryId, sessionId, sequence])
+}
+
+/// AI summary suggestion tied to a specific source revision of the working text.
+model JournalSuggestion {
+  id             String           @id @default(cuid())
+  entryId        String
+  /// Opaque request id so late responses after delete are discarded.
+  requestId      String           @unique
+  suggestedText  String
+  sourceRevision Int
+  status         SuggestionStatus @default(PENDING)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  entry JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId, createdAt])
 }
 
 /// Editable parent-facing draft, independent of private journal body.
@@ -223,9 +275,26 @@ model PublishedShare {
   publishedAt         DateTime  @default(now())
   withdrawnAt         DateTime?
 
-  entry JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  child ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  entry    JournalEntry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  child    ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  guidance ParentGuidance?
 
   @@index([familyId, withdrawnAt, publishedAt])
   @@index([childId, withdrawnAt])
+}
+
+/// Cached AI approach tips for a parent, tied to one published snapshot revision.
+/// Built only from published parentMessage / supportRequest — never private journal text.
+model ParentGuidance {
+  id                   String   @id @default(cuid())
+  shareId              String   @unique
+  /// Matches PublishedShare.sourceDraftRevision at generation time.
+  snapshotRevision     Int
+  conversationOpener   String
+  supportAction        String
+  provider             String   @default("")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  share PublishedShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
 }
