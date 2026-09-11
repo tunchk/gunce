@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { listActiveGuardianAccesses, requireGuardianAccess } from "@/lib/guardian";
 
 /**
- * Parent-only diagnostic of family children. Used by tests and never trusts client role claims.
+ * Parent-accessible children via ChildGuardianAccess (not family membership alone).
  */
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -17,32 +17,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Yalnızca veliler erişebilir." }, { status: 403 });
   }
 
-  const membership = await prisma.familyMembership.findUnique({
-    where: { userId: session.user.id },
-    include: {
-      family: {
-        include: {
-          children: {
-            select: {
-              id: true,
-              displayName: true,
-              ageGroup: true,
-              timeZone: true,
-              avatarKey: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!membership) {
-    return NextResponse.json({ family: null, children: [] });
-  }
-
+  const accesses = await listActiveGuardianAccesses(session.user.id);
   return NextResponse.json({
-    familyId: membership.familyId,
-    children: membership.family.children,
+    children: accesses.map((a) => ({
+      id: a.child.id,
+      displayName: a.child.displayName,
+      ageGroup: a.child.ageGroup,
+      timeZone: a.child.timeZone,
+      avatarKey: a.child.avatarKey,
+      role: a.role,
+    })),
   });
 }
 
@@ -69,22 +53,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "childId gerekli." }, { status: 400 });
   }
 
-  const membership = await prisma.familyMembership.findUnique({
-    where: { userId: session.user.id },
-  });
-
-  if (!membership) {
-    return NextResponse.json({ error: "Aile bulunamadı." }, { status: 404 });
-  }
-
-  const child = await prisma.childProfile.findFirst({
-    where: { id: body.childId, familyId: membership.familyId },
-    select: { id: true, displayName: true },
-  });
-
-  if (!child) {
+  try {
+    await requireGuardianAccess(session.user.id, body.childId);
+  } catch {
     return NextResponse.json({ error: "Bu çocuğa erişimin yok." }, { status: 403 });
   }
 
-  return NextResponse.json({ child });
+  const accesses = await listActiveGuardianAccesses(session.user.id);
+  const hit = accesses.find((a) => a.childId === body.childId);
+  if (!hit) {
+    return NextResponse.json({ error: "Bu çocuğa erişimin yok." }, { status: 403 });
+  }
+
+  return NextResponse.json({
+    child: {
+      id: hit.child.id,
+      displayName: hit.child.displayName,
+    },
+  });
 }

@@ -23,6 +23,7 @@ export class JournalError extends Error {
       | "VALIDATION"
       | "EMPTY_SHARE"
       | "UNAUTHORIZED"
+      | "FORBIDDEN"
       | "GONE",
   ) {
     super(message);
@@ -48,7 +49,15 @@ export function diaryDateForTimeZone(timeZone: string, at = new Date()): Date {
 
 const entryInclude = {
   draft: true,
-  published: true,
+  published: {
+    include: {
+      recipients: {
+        include: {
+          guardian: { select: { id: true, name: true } },
+        },
+      },
+    },
+  },
   suggestions: {
     orderBy: { createdAt: "desc" as const },
     take: 1,
@@ -107,6 +116,7 @@ export type ChildEntryView = {
     publishedAt: string;
     sourceDraftRevision: number;
     hasUnpublishedChanges: boolean;
+    recipients: Array<{ userId: string; name: string }>;
   };
   latestSuggestion: null | {
     id: string;
@@ -136,6 +146,10 @@ function toChildEntryView(entry: {
     publishedAt: Date;
     withdrawnAt: Date | null;
     sourceDraftRevision: number;
+    recipients?: Array<{
+      guardianUserId: string;
+      guardian?: { id: string; name: string };
+    }>;
   } | null;
   suggestions?: Array<{
     id: string;
@@ -190,6 +204,10 @@ function toChildEntryView(entry: {
           publishedAt: activePublished.publishedAt.toISOString(),
           sourceDraftRevision: activePublished.sourceDraftRevision,
           hasUnpublishedChanges,
+          recipients: (activePublished.recipients ?? []).map((r) => ({
+            userId: r.guardianUserId,
+            name: r.guardian?.name ?? "Veli",
+          })),
         }
       : null,
     latestSuggestion: latest
@@ -386,6 +404,8 @@ export async function publishShare(input: {
   childUserId: string;
   entryId: string;
   expectedDraftRevision: number;
+  /** Explicit recipients. When omitted (tests/legacy), all current guardians are used. */
+  recipientUserIds?: string[];
 }) {
   const { child, entry } = await requireOwnedEntry(input.childUserId, input.entryId);
   let draft = entry.draft;
@@ -411,11 +431,36 @@ export async function publishShare(input: {
     );
   }
 
+  const { listShareableGuardians } = await import("@/lib/guardian");
+  const eligible = await listShareableGuardians(child.id);
+  const byId = new Map(eligible.map((g) => [g.userId, g]));
+
+  const uniqueRecipients = [
+    ...new Set(
+      input.recipientUserIds?.length
+        ? input.recipientUserIds
+        : eligible.map((g) => g.userId),
+    ),
+  ];
+  if (uniqueRecipients.length === 0) {
+    throw new JournalError("En az bir veli seçmelisin.", "EMPTY_SHARE");
+  }
+
+  for (const id of uniqueRecipients) {
+    if (!byId.has(id)) {
+      throw new JournalError(
+        "Seçilen velilerden biri artık erişime sahip değil. Listeyi yenile.",
+        "FORBIDDEN",
+      );
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     const existing = await tx.publishedShare.findUnique({
       where: { entryId: entry.id },
     });
 
+    let shareId: string;
     if (existing) {
       // Republish changes the snapshot; drop cached parent guidance.
       await tx.parentGuidance.deleteMany({ where: { shareId: existing.id } });
@@ -431,8 +476,10 @@ export async function publishShare(input: {
           familyId: child.familyId,
         },
       });
+      shareId = existing.id;
+      await tx.publishedShareRecipient.deleteMany({ where: { shareId } });
     } else {
-      await tx.publishedShare.create({
+      const created = await tx.publishedShare.create({
         data: {
           entryId: entry.id,
           childId: child.id,
@@ -442,7 +489,16 @@ export async function publishShare(input: {
           sourceDraftRevision: draft!.revision,
         },
       });
+      shareId = created.id;
     }
+
+    await tx.publishedShareRecipient.createMany({
+      data: uniqueRecipients.map((userId) => ({
+        shareId,
+        guardianUserId: userId,
+        accessGeneration: byId.get(userId)!.generation,
+      })),
+    });
 
     if (entry.status === "DRAFT") {
       await tx.journalEntry.update({
@@ -865,17 +921,27 @@ export async function listParentSharedContent(parentUserId: string): Promise<{
   messages: ParentSharedItem[];
   supportRequests: ParentSharedItem[];
 }> {
-  const membership = await prisma.familyMembership.findUnique({
-    where: { userId: parentUserId },
+  const accesses = await prisma.childGuardianAccess.findMany({
+    where: { userId: parentUserId, revokedAt: null },
   });
-  if (!membership) {
+  if (accesses.length === 0) {
     return { messages: [], supportRequests: [] };
   }
 
+  const orFilters = accesses.map((a) => ({
+    childId: a.childId,
+    recipients: {
+      some: {
+        guardianUserId: parentUserId,
+        accessGeneration: a.generation,
+      },
+    },
+  }));
+
   const shares = await prisma.publishedShare.findMany({
     where: {
-      familyId: membership.familyId,
       withdrawnAt: null,
+      OR: orFilters,
     },
     include: {
       child: { select: { id: true, displayName: true } },
@@ -919,22 +985,36 @@ export async function getParentShareDetail(
   parentUserId: string,
   shareId: string,
 ): Promise<ParentShareDetail> {
-  const membership = await prisma.familyMembership.findUnique({
-    where: { userId: parentUserId },
-  });
-  if (!membership) {
-    throw new JournalError("Aile bulunamadı.", "NOT_FOUND");
-  }
-
   const share = await prisma.publishedShare.findUnique({
     where: { id: shareId },
     include: {
       child: { select: { id: true, displayName: true, familyId: true } },
       entry: { select: { diaryDate: true } },
+      recipients: true,
     },
   });
 
-  if (!share || share.familyId !== membership.familyId || share.withdrawnAt) {
+  if (!share || share.withdrawnAt) {
+    throw new JournalError("Bu içerik seninle paylaşılmamış.", "NOT_FOUND");
+  }
+
+  const access = await prisma.childGuardianAccess.findFirst({
+    where: {
+      userId: parentUserId,
+      childId: share.childId,
+      revokedAt: null,
+    },
+  });
+  if (!access) {
+    throw new JournalError("Bu içerik seninle paylaşılmamış.", "NOT_FOUND");
+  }
+
+  const recipient = share.recipients.find(
+    (r) =>
+      r.guardianUserId === parentUserId &&
+      r.accessGeneration === access.generation,
+  );
+  if (!recipient) {
     throw new JournalError("Bu içerik seninle paylaşılmamış.", "NOT_FOUND");
   }
 
@@ -994,23 +1074,34 @@ export async function getOrCreateParentGuidance(input: {
     where: { id: input.shareId },
     select: {
       id: true,
-      familyId: true,
+      childId: true,
       withdrawnAt: true,
       sourceDraftRevision: true,
       parentMessage: true,
       supportRequest: true,
+      recipients: true,
     },
   });
-  const membership = await prisma.familyMembership.findUnique({
-    where: { userId: input.parentUserId },
-  });
-  if (
-    !still ||
-    !membership ||
-    still.familyId !== membership.familyId ||
-    still.withdrawnAt ||
-    still.sourceDraftRevision !== detail.snapshotRevision
-  ) {
+  const access = still
+    ? await prisma.childGuardianAccess.findFirst({
+        where: {
+          userId: input.parentUserId,
+          childId: still.childId,
+          revokedAt: null,
+        },
+      })
+    : null;
+  const stillAllowed =
+    still &&
+    access &&
+    !still.withdrawnAt &&
+    still.sourceDraftRevision === detail.snapshotRevision &&
+    still.recipients.some(
+      (r) =>
+        r.guardianUserId === input.parentUserId &&
+        r.accessGeneration === access.generation,
+    );
+  if (!stillAllowed) {
     throw new JournalError("Bu içerik artık seninle paylaşılmıyor.", "GONE");
   }
 
@@ -1045,26 +1136,35 @@ export async function getOrCreateParentGuidance(input: {
 
 /** Parent probe by entry id — must never return private body. */
 export async function parentTryGetEntry(parentUserId: string, entryId: string) {
-  const membership = await prisma.familyMembership.findUnique({
-    where: { userId: parentUserId },
-  });
-  if (!membership) {
-    throw new JournalError("Aile bulunamadı.", "NOT_FOUND");
-  }
-
   const entry = await prisma.journalEntry.findUnique({
     where: { id: entryId },
     include: {
       child: true,
-      published: true,
+      published: { include: { recipients: true } },
     },
   });
 
-  if (!entry || entry.child.familyId !== membership.familyId) {
+  if (!entry?.published || entry.published.withdrawnAt) {
+    throw new JournalError("Bu içerik seninle paylaşılmamış.", "NOT_FOUND");
+  }
+
+  const access = await prisma.childGuardianAccess.findFirst({
+    where: {
+      userId: parentUserId,
+      childId: entry.childId,
+      revokedAt: null,
+    },
+  });
+  if (!access) {
     throw new JournalError("Kayıt bulunamadı.", "NOT_FOUND");
   }
 
-  if (!entry.published || entry.published.withdrawnAt) {
+  const allowed = entry.published.recipients.some(
+    (r) =>
+      r.guardianUserId === parentUserId &&
+      r.accessGeneration === access.generation,
+  );
+  if (!allowed) {
     throw new JournalError("Bu içerik seninle paylaşılmamış.", "NOT_FOUND");
   }
 

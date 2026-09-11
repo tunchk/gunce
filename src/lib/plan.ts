@@ -901,22 +901,17 @@ export async function getStudyStep(childUserId: string, id: string) {
   return toStudyStepView(row);
 }
 
-/** Parent read-only plan for their family children — never includes journal fields. */
+/** Parent read-only plan for accessible children — never includes journal fields. */
 export async function getParentWeekPlan(parentUserId: string, weekStartIso?: string) {
-  const membership = await prisma.familyMembership.findUnique({
-    where: { userId: parentUserId },
-  });
-  if (!membership) {
-    return { children: [] as const };
-  }
-
-  const children = await prisma.childProfile.findMany({
-    where: { familyId: membership.familyId },
+  const accesses = await prisma.childGuardianAccess.findMany({
+    where: { userId: parentUserId, revokedAt: null },
+    include: { child: true },
     orderBy: { createdAt: "asc" },
   });
 
   const result = [];
-  for (const child of children) {
+  for (const access of accesses) {
+    const child = access.child;
     if (!child.userId) continue;
     const week = await getWeekPlanForChild(child.userId, weekStartIso);
     result.push({

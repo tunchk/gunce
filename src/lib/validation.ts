@@ -18,6 +18,28 @@ export const parentSignInSchema = z.object({
   password: z.string().min(1, "Şifre gerekli."),
 });
 
+export const parentForgotPasswordSchema = z.object({
+  email: z.string().trim().email("Geçerli bir e-posta gir."),
+});
+
+export const parentResetPasswordSchema = z
+  .object({
+    token: z.string().trim().min(10, "Bağlantı geçersiz."),
+    password: z
+      .string()
+      .min(8, "Şifre en az 8 karakter olmalı.")
+      .max(128, "Şifre çok uzun."),
+    passwordConfirm: z.string().min(1, "Şifre tekrarı gerekli."),
+  })
+  .refine((data) => data.password === data.passwordConfirm, {
+    message: "Şifreler eşleşmiyor.",
+    path: ["passwordConfirm"],
+  });
+
+export const parentVerifyEmailSchema = z.object({
+  token: z.string().trim().min(10, "Bağlantı geçersiz."),
+});
+
 export const childProfileSchema = z.object({
   displayName: z
     .string()

@@ -50,6 +50,12 @@ enum SuggestionStatus {
   STALE
 }
 
+/// Per-child guardian permission. MANAGER can invite/remove guardians and manage pairing.
+enum GuardianRole {
+  MANAGER
+  INVITED
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String
@@ -63,9 +69,12 @@ model User {
   sessions Session[]
   accounts Account[]
 
-  memberships         FamilyMembership[]
-  createdInvitations  PairingInvitation[] @relation("InvitationCreator")
-  childProfile        ChildProfile?
+  memberships              FamilyMembership[]
+  createdInvitations       PairingInvitation[] @relation("InvitationCreator")
+  childProfile             ChildProfile?
+  guardianAccesses         ChildGuardianAccess[]
+  createdGuardianInvites   GuardianInvitation[]  @relation("GuardianInviteCreator")
+  shareRecipients          PublishedShareRecipient[]
 }
 
 model Session {
@@ -151,6 +160,8 @@ model ChildProfile {
   family      Family              @relation(fields: [familyId], references: [id], onDelete: Cascade)
   user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   invitations PairingInvitation[]
+  guardianAccesses ChildGuardianAccess[]
+  guardianInvitations GuardianInvitation[]
   journalEntries JournalEntry[]
   publishedShares PublishedShare[]
   planCommitments PlanCommitment[]
@@ -163,6 +174,46 @@ model ChildProfile {
   reminderDayBuckets ReminderDayBucket[]
 
   @@index([familyId])
+}
+
+/// Explicit guardian ↔ child access. Family membership alone does not grant child access.
+model ChildGuardianAccess {
+  id         String       @id @default(cuid())
+  childId    String
+  userId     String
+  role       GuardianRole
+  /// Bumped on re-invitation after removal so old share recipient grants do not revive.
+  generation Int          @default(1)
+  createdAt  DateTime     @default(now())
+  revokedAt  DateTime?
+
+  child ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([childId, revokedAt])
+  @@index([childId, userId])
+}
+
+/// Invitation for another parent account to become an INVITED guardian of one child.
+model GuardianInvitation {
+  id              String    @id @default(cuid())
+  childId         String
+  /// Normalized lowercase email the invitation is bound to.
+  email           String
+  invitedByUserId String
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  redeemedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  child     ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  invitedBy User         @relation("GuardianInviteCreator", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+  @@index([email])
+  @@index([expiresAt])
 }
 
 model PairingInvitation {
@@ -284,12 +335,29 @@ model PublishedShare {
   publishedAt         DateTime  @default(now())
   withdrawnAt         DateTime?
 
-  entry    JournalEntry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  child    ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
-  guidance ParentGuidance?
+  entry      JournalEntry              @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  child      ChildProfile              @relation(fields: [childId], references: [id], onDelete: Cascade)
+  guidance   ParentGuidance?
+  recipients PublishedShareRecipient[]
 
   @@index([familyId, withdrawnAt, publishedAt])
   @@index([childId, withdrawnAt])
+}
+
+/// Explicit share audience. accessGeneration must match the guardian's active access generation.
+model PublishedShareRecipient {
+  id               String   @id @default(cuid())
+  shareId          String
+  guardianUserId   String
+  accessGeneration Int
+  createdAt        DateTime @default(now())
+
+  share    PublishedShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  guardian User           @relation(fields: [guardianUserId], references: [id], onDelete: Cascade)
+
+  @@unique([shareId, guardianUserId])
+  @@index([guardianUserId])
+  @@index([shareId])
 }
 
 /// Cached AI approach tips for a parent, tied to one published snapshot revision.

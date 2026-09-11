@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { SharingPanel } from "@/components/sharing-panel";
 import { Panel, Shell } from "@/components/ui";
+import { listShareableGuardians } from "@/lib/guardian";
 import { getChildEntry, JournalError } from "@/lib/journal";
 import { getAppSession, getChildProfileForUser } from "@/lib/session";
 
@@ -22,14 +23,16 @@ export default async function ShareReviewPage({ params }: Props) {
     throw error;
   }
 
+  const guardians = await listShareableGuardians(child.id);
+
   return (
     <Shell
       title="Ne paylaşılacak?"
-      subtitle="Soldaki özel yazın sende kalır. Velinin göreceği metni ayrıca hazırlarsın."
+      subtitle="Özel yazın sende kalır. Velinin göreceği metni ayrıca hazırlarsın."
       withChildNav
     >
       <Panel>
-        <SharingPanel entry={entry} />
+        <SharingPanel entry={entry} guardians={guardians} />
       </Panel>
       <p className="mt-4">
         <Link href={`/cocuk/gunluk/${entry.id}`} className="font-semibold underline">

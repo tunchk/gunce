@@ -5,7 +5,15 @@ import { useState } from "react";
 import type { ChildEntryView } from "@/lib/journal";
 import { Button, FieldError } from "@/components/ui";
 
-export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
+type GuardianOption = { userId: string; name: string; role: string };
+
+export function SharingPanel({
+  entry: initial,
+  guardians,
+}: {
+  entry: ChildEntryView;
+  guardians: GuardianOption[];
+}) {
   const router = useRouter();
   const [parentMessage, setParentMessage] = useState(initial.draft.parentMessage);
   const [supportRequest, setSupportRequest] = useState(initial.draft.supportRequest);
@@ -14,6 +22,11 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
   const [message, setMessage] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [pending, setPending] = useState(false);
+
+  const initialSelected =
+    initial.published?.recipients.map((r) => r.userId) ??
+    (guardians.length === 1 ? [guardians[0]!.userId] : []);
+  const [selectedIds, setSelectedIds] = useState<string[]>(initialSelected);
 
   const hasSummary = Boolean(initial.acceptedSummary?.trim());
   const hasOriginal = Boolean(
@@ -45,6 +58,9 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
       setSupportRequest(data.entry.draft.supportRequest);
       setDraftRevision(data.entry.draft.revision);
       setPublished(data.entry.published);
+      if (data.entry.published?.recipients) {
+        setSelectedIds(data.entry.published.recipients.map((r) => r.userId));
+      }
       setPending(false);
       router.refresh();
       return data.entry;
@@ -65,6 +81,10 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
   }
 
   async function publish() {
+    if (selectedIds.length === 0) {
+      setError("En az bir veli seçmelisin.");
+      return;
+    }
     const saved = await patch("update_draft", {
       parentMessage,
       supportRequest,
@@ -73,9 +93,10 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
     if (!saved) return;
     const entry = await patch("publish", {
       expectedDraftRevision: saved.draft.revision,
+      recipientUserIds: selectedIds,
     });
     if (entry) {
-      setMessage(published ? "Paylaşım güncellendi." : "Velinle paylaşıldı.");
+      setMessage(published ? "Paylaşım güncellendi." : "Seçtiğin velilerle paylaşıldı.");
     }
   }
 
@@ -86,6 +107,12 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
         "Paylaşımı geri çektiğinde velin bu içeriği artık uygulamada göremez. Daha önce okumuş olduğu bilgiyi geri alamayız.",
       );
     }
+  }
+
+  function toggleGuardian(userId: string) {
+    setSelectedIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
+    );
   }
 
   function copySummary() {
@@ -106,6 +133,9 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
 
   const previewMessage = parentMessage.trim();
   const previewSupport = supportRequest.trim();
+  const selectedNames = guardians
+    .filter((g) => selectedIds.includes(g.userId))
+    .map((g) => g.name);
 
   return (
     <div className="space-y-5">
@@ -117,18 +147,13 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
         >
           {initial.body.trim() || "(Henüz özel yazı yok)"}
         </p>
-        {hasSummary && initial.acceptedSummary.trim() !== initial.body.trim() ? (
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Kabul ettiğin özet ayrı duruyor; veli otomatik görmez.
-          </p>
-        ) : null}
       </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Velimin göreceği</h2>
         <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-          Aşağıya ne yazarsan (veya kopyalarsan) yalnızca onu paylaşabilirsin. Kısa bir cümle de olur;
-          önizlemede tam olarak ne gideceğini gör.
+          Aşağıya ne yazarsan yalnızca onu paylaşabilirsin. Plan ve hedefler ayrıdır; onları aktif
+          veliler görebilir, günlük paylaşımı ise burada seçtiğin alıcılara gider.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           {hasSummary ? (
@@ -190,11 +215,52 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
         </label>
       </section>
 
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Kim görecek?</h2>
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          Yeni eklenen bir veli eski paylaşımları otomatik görmez. Alıcı değişince Paylaşımı
+          güncellemen gerekir.
+        </p>
+        {guardians.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--danger)" }}>
+            Henüz bağlı veli yok.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {guardians.map((g) => (
+              <li key={g.userId}>
+                <label className="flex min-h-11 items-center gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(g.userId)}
+                    onChange={() => toggleGuardian(g.userId)}
+                  />
+                  <span className="font-semibold">{g.name}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <section
         className="space-y-2 rounded-2xl p-4"
         style={{ background: "var(--accent-soft)", border: "1px solid var(--line)" }}
       >
-        <h3 className="font-semibold">Velin şunu görecek</h3>
+        <h3 className="font-semibold">
+          {selectedNames.length <= 1
+            ? "Velin şunu görecek"
+            : "Seçtiğin veliler şunu görecek"}
+        </h3>
+        {selectedNames.length > 0 ? (
+          <p className="text-xs font-semibold" style={{ color: "var(--muted)" }}>
+            Alıcılar: {selectedNames.join(", ")}
+          </p>
+        ) : (
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Henüz veli seçilmedi.
+          </p>
+        )}
         <p className="text-xs" style={{ color: "var(--muted)" }}>
           Paylaş’a basınca yalnızca bu önizleme gider. Özel günlüğün otomatik gitmez.
         </p>
@@ -226,7 +292,8 @@ export function SharingPanel({ entry: initial }: { entry: ChildEntryView }) {
 
       {published?.hasUnpublishedChanges ? (
         <p className="text-sm font-semibold" style={{ color: "var(--warn)" }} role="status">
-          Yayındaki içerikten farklı değişikliklerin var. Velinin görmesi için “Paylaşımı güncelle”ye bas.
+          Yayındaki içerikten farklı değişikliklerin var. Velinin görmesi için “Paylaşımı
+          güncelle”ye bas.
         </p>
       ) : null}
 

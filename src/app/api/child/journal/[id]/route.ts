@@ -82,6 +82,7 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
     parentMessage?: string;
     supportRequest?: string;
     expectedDraftRevision?: number;
+    recipientUserIds?: string[];
     suggestionId?: string;
     editedText?: string;
     transcript?: string;
@@ -127,10 +128,14 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
       if (typeof body.expectedDraftRevision !== "number") {
         return NextResponse.json({ error: "expectedDraftRevision gerekli." }, { status: 400, headers: NO_STORE });
       }
+      const recipientUserIds = Array.isArray(body.recipientUserIds)
+        ? body.recipientUserIds.filter((x: unknown): x is string => typeof x === "string")
+        : undefined;
       const entry = await publishShare({
         childUserId: authz.session!.user.id,
         entryId: id,
         expectedDraftRevision: body.expectedDraftRevision,
+        recipientUserIds,
       });
       return NextResponse.json({ entry }, { headers: NO_STORE });
     }

@@ -2,7 +2,14 @@
  * E2E helpers. Keep Playwright `test` imports inside spec files only so Vitest
  * does not load Playwright's test runner when scanning the repo.
  */
+import { register } from "tsconfig-paths";
+import path from "node:path";
 import { execSync } from "node:child_process";
+
+register({
+  baseUrl: path.join(__dirname, ".."),
+  paths: { "@/*": ["src/*"] },
+});
 
 const PORT = Number(process.env.E2E_PORT || 3100);
 const baseURL = process.env.E2E_BASE_URL || `http://127.0.0.1:${PORT}`;
@@ -20,6 +27,8 @@ process.env.DATABASE_URL_TEST = TEST_DB;
 process.env.BETTER_AUTH_SECRET = BETTER_AUTH_SECRET;
 process.env.BETTER_AUTH_URL = baseURL;
 process.env.NEXT_PUBLIC_APP_URL = baseURL;
+process.env.GUNCE_MAIL_TEST_CAPTURE = "1";
+process.env.GUNCE_ALLOW_MAIL_TEST_CAPTURE = "1";
 
 export function assertTestDb() {
   const db = new URL(TEST_DB).pathname.replace(/^\//, "").split("/")[0];
@@ -45,6 +54,7 @@ export async function wipe() {
   }
 
   await prisma.parentGuidance.deleteMany();
+  await prisma.publishedShareRecipient.deleteMany();
   await prisma.reminderDelivery.deleteMany();
   await prisma.reminderOccurrence.deleteMany();
   await prisma.reminderDayBucket.deleteMany();
@@ -61,6 +71,8 @@ export async function wipe() {
   await prisma.planGoal.deleteMany();
   await prisma.planCommitment.deleteMany();
   await prisma.rateLimitBucket.deleteMany();
+  await prisma.guardianInvitation.deleteMany();
+  await prisma.childGuardianAccess.deleteMany();
   await prisma.pairingInvitation.deleteMany();
   await prisma.childProfile.deleteMany();
   await prisma.familyMembership.deleteMany();
@@ -103,6 +115,7 @@ export {
   prisma,
   signInAndGetCookie,
 } from "../tests/helpers";
+
 
 export {
   createJournalEntry,

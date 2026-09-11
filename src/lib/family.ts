@@ -7,6 +7,10 @@ import {
   generatePairingToken,
   hashToken,
 } from "@/lib/crypto";
+import {
+  ensureManagerAccessForChild,
+  requireManagerAccess,
+} from "@/lib/guardian";
 import { prisma } from "@/lib/prisma";
 import { AuthorizationError } from "@/lib/session";
 
@@ -84,6 +88,11 @@ export async function upsertChildDuringOnboarding(input: {
       },
     });
 
+    await ensureManagerAccessForChild({
+      parentUserId: input.parentUserId,
+      childId: child.id,
+    });
+
     if (membership.family.onboardingStep === "CHILD_PROFILE") {
       await prisma.family.update({
         where: { id: membership.familyId },
@@ -101,6 +110,11 @@ export async function upsertChildDuringOnboarding(input: {
       ageGroup: input.ageGroup,
       timeZone: input.timeZone,
     },
+  });
+
+  await ensureManagerAccessForChild({
+    parentUserId: input.parentUserId,
+    childId: child.id,
   });
 
   await prisma.family.update({
@@ -132,19 +146,15 @@ export async function createPairingInvitation(input: {
   parentUserId: string;
   childId: string;
 }) {
+  await requireManagerAccess(input.parentUserId, input.childId);
+
+  const child = await prisma.childProfile.findUniqueOrThrow({
+    where: { id: input.childId },
+  });
+
   const membership = await prisma.familyMembership.findUnique({
     where: { userId: input.parentUserId },
   });
-  if (!membership) {
-    throw new AuthorizationError("Aile bulunamadı.");
-  }
-
-  const child = await prisma.childProfile.findFirst({
-    where: { id: input.childId, familyId: membership.familyId },
-  });
-  if (!child) {
-    throw new AuthorizationError("Bu çocuğa erişimin yok.");
-  }
 
   await prisma.pairingInvitation.updateMany({
     where: {
@@ -166,14 +176,17 @@ export async function createPairingInvitation(input: {
     },
   });
 
-  if (
-    (await prisma.family.findUniqueOrThrow({ where: { id: membership.familyId } }))
-      .onboardingStep !== "COMPLETE"
-  ) {
-    await prisma.family.update({
-      where: { id: membership.familyId },
-      data: { onboardingStep: "PAIRING" },
+  // Only advance onboarding for the family that owns this child when the manager is a member.
+  if (membership && membership.familyId === child.familyId) {
+    const family = await prisma.family.findUniqueOrThrow({
+      where: { id: child.familyId },
     });
+    if (family.onboardingStep !== "COMPLETE") {
+      await prisma.family.update({
+        where: { id: child.familyId },
+        data: { onboardingStep: "PAIRING" },
+      });
+    }
   }
 
   return { invitation, token };
@@ -316,19 +329,11 @@ export async function revokeChildSessions(input: {
   parentUserId: string;
   childId: string;
 }) {
-  const membership = await prisma.familyMembership.findUnique({
-    where: { userId: input.parentUserId },
-  });
-  if (!membership) {
-    throw new AuthorizationError("Aile bulunamadı.");
-  }
+  await requireManagerAccess(input.parentUserId, input.childId);
 
-  const child = await prisma.childProfile.findFirst({
-    where: { id: input.childId, familyId: membership.familyId },
+  const child = await prisma.childProfile.findUniqueOrThrow({
+    where: { id: input.childId },
   });
-  if (!child) {
-    throw new AuthorizationError("Bu çocuğa erişimin yok.");
-  }
 
   await prisma.pairingInvitation.updateMany({
     where: {

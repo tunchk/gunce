@@ -1,5 +1,9 @@
 import { redirect } from "next/navigation";
-import { getAppSession, getParentFamilyContext } from "@/lib/session";
+import {
+  getAppSession,
+  getParentAccessibleChildren,
+  getParentFamilyContext,
+} from "@/lib/session";
 
 export default async function ParentIndexPage() {
   const session = await getAppSession();
@@ -7,15 +11,19 @@ export default async function ParentIndexPage() {
     redirect("/giris");
   }
 
+  const accesses = await getParentAccessibleChildren(session.user.id);
   const membership = await getParentFamilyContext(session.user.id);
-  if (!membership) {
-    redirect("/veli/onboarding");
+
+  if (membership && membership.family.onboardingStep !== "COMPLETE") {
+    const step = membership.family.onboardingStep;
+    if (step === "CHILD_PROFILE") redirect("/veli/onboarding");
+    if (step === "EXPLANATION") redirect("/veli/onboarding/aciklama");
+    if (step === "PAIRING") redirect("/veli/onboarding/eslestirme");
   }
 
-  const step = membership.family.onboardingStep;
-  if (step === "CHILD_PROFILE") redirect("/veli/onboarding");
-  if (step === "EXPLANATION") redirect("/veli/onboarding/aciklama");
-  if (step === "PAIRING") redirect("/veli/onboarding/eslestirme");
+  if (accesses.length === 0) {
+    redirect("/veli/onboarding");
+  }
 
   redirect("/veli/ana");
 }

@@ -15,6 +15,7 @@ export type AppSession = {
     id: string;
     name: string;
     email: string;
+    emailVerified: boolean;
     role: UserRole;
   };
 };
@@ -40,6 +41,7 @@ export async function getAppSession(): Promise<AppSession | null> {
       id: session.user.id,
       name: session.user.name,
       email: session.user.email,
+      emailVerified: Boolean(session.user.emailVerified),
       role,
     },
   };
@@ -91,23 +93,21 @@ export async function getParentFamilyContext(userId: string) {
   return membership;
 }
 
+/** Children this parent may access (manager or invited), with roles. */
+export async function getParentAccessibleChildren(userId: string) {
+  const { listActiveGuardianAccesses } = await import("@/lib/guardian");
+  return listActiveGuardianAccesses(userId);
+}
+
 export async function assertParentOwnsChild(
   parentUserId: string,
   childId: string,
 ): Promise<{ child: ChildProfile; family: Family }> {
-  const membership = await prisma.familyMembership.findUnique({
-    where: { userId: parentUserId },
-  });
-
-  if (!membership) {
-    throw new AuthorizationError("Bu aileye erişimin yok.");
-  }
+  const { requireGuardianAccess } = await import("@/lib/guardian");
+  await requireGuardianAccess(parentUserId, childId);
 
   const child = await prisma.childProfile.findFirst({
-    where: {
-      id: childId,
-      familyId: membership.familyId,
-    },
+    where: { id: childId },
     include: { family: true },
   });
 

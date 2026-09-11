@@ -16,9 +16,23 @@
 | Parent | Better Auth `User` (`role=PARENT`)| `FamilyMembership` → `Family` → `ChildProfile`s |
 | Child  | Better Auth `User` (`role=CHILD`) | `ChildProfile.userId` (synthetic email, never shown) |
 
-### Email verification
+### Email verification & password recovery (Milestone 9)
 
-`User.emailVerified` defaults to `false`. This milestone does **not** set it to `true` on registration and does not implement a verification email flow. Local sign-in works with unverified email because Better Auth `requireEmailVerification` is not enabled. Treat any production verification as a future feature.
+`User.emailVerified` defaults to `false`. Registration sends a verification email via Better Auth `emailVerification` hooks but **does not** require verification for sign-in (`requireEmailVerification` remains unset/false). Existing unverified accounts stay unverified until they confirm.
+
+Links use the configured app origin (`BETTER_AUTH_URL` / `NEXT_PUBLIC_APP_URL` via `getAppOrigin()`), not request Host headers. Verification emails point to `/veli/eposta-dogrula?token=…`; the token is consumed only when the parent submits **E-postamı doğrula** (Better Auth `verifyEmail`). Password-reset emails point to `/veli/sifre-yenile?token=…`; GET does not consume the token — only successful `resetPassword` does (`consumeVerificationValue`). `revokeSessionsOnPasswordReset` deletes that parent’s sessions; `onPasswordReset` also deletes remaining `reset-password:*` verification rows for the user. Reset does **not** set `emailVerified`.
+
+Mail delivery is abstracted in `src/lib/mail.ts` (`sendMail`). Local transports only: file preview (`GUNCE_MAIL_PREVIEW=1` → `.mail-preview/`, never production) and test capture (`GUNCE_MAIL_TEST_CAPTURE`). In `NODE_ENV=production`, capture requires loopback app origin **and** `GUNCE_ALLOW_MAIL_TEST_CAPTURE=1`. HTTP `GET /api/auth/verify-email` is blocked in middleware; confirm uses single-use redemption hashes plus Better Auth JWT verify. No production email provider in this milestone.
+
+## Multi-guardian & share audiences (Milestone 10)
+
+| Concept | Model | Notes |
+|---------|-------|-------|
+| Child access | `ChildGuardianAccess` | `MANAGER` / `INVITED`, `generation`, soft `revokedAt` |
+| Guardian invite | `GuardianInvitation` | hashed token, email-bound, single-use |
+| Share audience | `PublishedShareRecipient` | `accessGeneration` must match active access |
+
+Pre-migration authorization was “any `FamilyMembership` of `PublishedShare.familyId`”. Migration backfills MANAGER access for each membership×child and recipients for each share×membership (generation 1). Parent list/detail/guidance now require active access **and** matching recipient generation.
 
 ## Journal & sharing model (Milestone 2)
 
@@ -226,4 +240,4 @@ Integration and E2E suites must use database name `gunce_test`. Setup aborts bef
 
 ## Explicitly not implemented yet
 
-Email verification, password recovery, emotional scoring, chatbot, automatic scheduling of exams/goals, recurring study schedules, smartwatch integration, parent push/email/SMS notifications.
+Production email provider (SMTP/API), requiring email verification for access, emotional scoring, chatbot, automatic scheduling of exams/goals, recurring study schedules, smartwatch integration, parent push/email/SMS notifications.

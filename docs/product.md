@@ -150,6 +150,30 @@ Presentation and navigation polish only — no new domain features.
 
 **Out of scope for Milestone 8.1:** new product features, offline audio persistence, hosting.
 
+## Milestone 9 — Parent email verification & password recovery (current)
+
+- Better Auth verification + reset flows with `sendMail` hooks (no second auth system)
+- Verification email after registration; compact reminder + rate-limited resend on parent home/settings
+- Explicit confirm on `/veli/eposta-dogrula` (GET does not verify — scanner-safe)
+- Unverified parents keep full access; existing accounts stay unverified until they confirm
+- **Şifremi unuttum** → identical public response for known/unknown emails → `/veli/sifre-yenile`
+- Successful reset: new password, revoke that parent’s sessions, invalidate outstanding reset tokens; does not set `emailVerified`; other parents / child sessions unchanged
+- Local mail: `GUNCE_MAIL_PREVIEW=1` → `.mail-preview/`; tests: in-memory + `.mail-capture/`
+- No production email provider, inbox UI, or mail queue in this milestone
+
+**Out of scope for Milestone 9:** SMTP/API provider integration, requiring verification for access, child email.
+
+## Milestone 10 — Multiple guardians & share audiences (current)
+
+- Per-child `ChildGuardianAccess` (`MANAGER` | `INVITED`); family membership alone does not grant child access
+- Managing veli invites another by email (verified sender); invitee registers/signs in, verifies email, explicitly accepts
+- Invited veliler: read plans/goals + shares addressed to them; cannot manage pairing or invite others
+- Cannot remove the last managing veli; removal bumps generation so old share grants do not revive
+- Child selects share recipients explicitly; new guardians get no historical shares
+- Migration: existing family members → MANAGER per child; existing published shares → recipients = prior family members (generation 1)
+
+**Out of scope for Milestone 10:** legal guardianship docs, custody workflows, manager transfer, parent plan edits, production email provider.
+
 ## Design principles
 
 - Separate parent and child identities and sessions

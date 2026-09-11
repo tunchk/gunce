@@ -8,7 +8,10 @@ Uygulama çocuklar (9–14) ve velileri için: gününü anlat, haftanı birlikt
 **Kilometre taşı 4:** çocuğun yönettiği haftalık plan ve pano; velinin salt okunur görünümü.  
 **Kilometre taşı 5:** uzun vadeli hedefler; aynı çalışma adımlarıyla bağlantı; veli salt okunur.  
 **Kilometre taşı 6:** günlükten plan önerileri; çocuk seçer ve mevcut plana ekler.  
-**Kilometre taşı 7:** isteğe bağlı hatırlatmalar; sunucu zamanlaması ve Web Push.
+**Kilometre taşı 7:** isteğe bağlı hatırlatmalar; sunucu zamanlaması ve Web Push.  
+**Kilometre taşı 8 / 8.1:** günlük UX ve güvenli günlük navigasyonu.  
+**Kilometre taşı 9:** veli e-posta doğrulama ve şifre yenileme (yerel önizleme / test yakalama; üretim e-posta sağlayıcısı yok).  
+**Kilometre taşı 10:** birden fazla veli; çocuk başına erişim; açık paylaşım alıcıları.
 
 Ürün: [`docs/product.md`](docs/product.md) · Mimari: [`docs/architecture.md`](docs/architecture.md)
 
@@ -40,10 +43,14 @@ cp .env.example .env
 | `VAPID_PRIVATE_KEY` | Web Push VAPID özel anahtar (yalnızca sunucu) |
 | `VAPID_SUBJECT` | `mailto:` veya site URL (VAPID subject) |
 | `REMINDER_SCHEDULER_SECRET` | Dahili zamanlayıcı endpoint sırrı |
+| `GUNCE_MAIL_PREVIEW` | `1` iken yerel HTML önizleme (`.mail-preview/`); üretimde çalışmaz |
+| `GUNCE_MAIL_PREVIEW_DIR` | Önizleme klasörü (varsayılan `.mail-preview`) |
+| `GUNCE_MAIL_TEST_CAPTURE` | Yalnızca test; e-postaları belleğe / `.mail-capture/` |
+| `GUNCE_ALLOW_MAIL_TEST_CAPTURE` | `NODE_ENV=production` iken yakalama için ek anahtar (Playwright) |
 
 Testler yalnızca `gunce_test` kullanır.
 
-**Geliştirme notu:** Veli kaydında e-posta doğrulanmış sayılmaz (`emailVerified=false`). Yerel giriş doğrulama olmadan çalışır; tam doğrulama akışı bu kilometre taşında yok.
+**E-posta (Milestone 9):** Veli kaydından sonra doğrulama e-postası gönderilir (`emailVerified` varsayılan `false` kalır). Doğrulama **erişim şartı değildir** — doğrulanmamış veli giriş yapıp uygulamayı kullanabilir. Bağlantı `/veli/eposta-dogrula` sayfasını açar; doğrulama yalnızca **E-postamı doğrula** düğmesiyle tamamlanır (GET tüketmez). Şifre yenileme: girişte **Şifremi unuttum**. Başarılı yenilemede o velinin oturumları ve bekleyen reset token’ları geçersiz olur; `emailVerified` değişmez. Yerel geliştirmede `GUNCE_MAIL_PREVIEW=1` → `.mail-preview/*.html` dosyalarını tarayıcıda dosya olarak aç. Gerçek SMTP/API sağlayıcı bu kilometre taşında yok; dış yayından önce `sendMail` transport’unu değiştirin.
 
 ## PostgreSQL (Homebrew — önerilen)
 
@@ -82,7 +89,8 @@ Haftalık plan migrasyonu: `20260910180000_weekly_planning`.
 Tamamlanma zaman damgası (metadata): `20260910200000_study_step_completed_at_metadata`.  
 Uzun vadeli hedefler: `20260910210000_plan_goals`.  
 Günlükten plan önerileri: `20260910220000_plan_extract`.  
-Hatırlatmalar / Web Push: `20260911100000_reminders_web_push`.
+Hatırlatmalar / Web Push: `20260911100000_reminders_web_push`.  
+Çoklu veli / paylaşım alıcıları: `20260911120000_multi_guardian_audiences`.
 
 ```bash
 npm run typecheck
@@ -116,6 +124,7 @@ npm run build && npm run test:e2e  # Playwright; Chromium gerekir (next start g�
 9. Veli: ana ekranda paylaşımlar önce; **Haftanın planı** salt okunur; planı düzenleyemez. Plan API’leri günlük metni taşımaz.
 10. Çocuk: **Hedeflerim** → hedef + adımlar; panoda tamamla → ilerleme güncellenir. Veli **Hedefler** salt okunur.
 11. Hatırlatmalar: çocuk **Ayarlar** → Hatırlatmalar (ana akışın dışında).
+12. Veli: kayıt sonrası doğrulama e-postası (isteğe bağlı); **Şifremi unuttum** → yenileme. Yerel: `GUNCE_MAIL_PREVIEW=1` ile `.mail-preview/` dosyalarını aç.
 
 ### Mikrofon (manuel kontrol listesi)
 
@@ -135,7 +144,7 @@ Ses ve metin, yapılandırılmış OpenAI uç noktalarına gönderilir. Uygulama
 ## Bilinen sınırlamalar
 
 - Bildirimler, tekrarlayan programlar, yapay zekâ ile otomatik görev planlaması sınırlı veya isteğe bağlıdır (bkz. kilometre taşları).
-- E-posta doğrulama ve şifre sıfırlama **yok**.
+- E-posta doğrulama ve şifre yenileme Better Auth + yerel/test mail transport ile vardır; **üretim SMTP/API sağlayıcısı henüz yok**.
 - Canlı OpenAI çağrıları anahtar olmadan doğrulanmaz; testler deterministik stub kullanır.
 - Çok bölümlü seste işlenmemiş ses yalnızca bellektemedir; yenileme / sekme kapatma / çökmede kaybolur.
 - Milestone 8 sunum iyileştirmesidir; gerçek telefon mikrofonu / kapalı-uygulama push kanıtı değildir.

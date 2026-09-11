@@ -34,6 +34,8 @@ assertSafeTestDatabaseUrl(process.env.DATABASE_URL);
 process.env.BETTER_AUTH_SECRET = "test-secret-please-change-32chars!!";
 process.env.BETTER_AUTH_URL = "http://localhost:3000";
 process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+process.env.GUNCE_MAIL_TEST_CAPTURE = "1";
+process.env.GUNCE_ALLOW_MAIL_TEST_CAPTURE = "1";
 
 beforeAll(() => {
   assertSafeTestDatabaseUrl(process.env.DATABASE_URL!);
@@ -46,6 +48,8 @@ beforeAll(() => {
 beforeEach(async () => {
   assertSafeTestDatabaseUrl(process.env.DATABASE_URL!);
   const { prisma } = await import("../src/lib/prisma");
+  const { clearCapturedMails } = await import("../src/lib/mail");
+  clearCapturedMails();
 
   // Defense in depth: confirm the live connection is still gunce_test.
   const rows = await prisma.$queryRaw<Array<{ db: string }>>`SELECT current_database() AS db`;
@@ -57,6 +61,7 @@ beforeEach(async () => {
   }
 
   await prisma.parentGuidance.deleteMany();
+  await prisma.publishedShareRecipient.deleteMany();
   await prisma.reminderDelivery.deleteMany();
   await prisma.reminderOccurrence.deleteMany();
   await prisma.reminderDayBucket.deleteMany();
@@ -73,6 +78,8 @@ beforeEach(async () => {
   await prisma.planGoal.deleteMany();
   await prisma.planCommitment.deleteMany();
   await prisma.rateLimitBucket.deleteMany();
+  await prisma.guardianInvitation.deleteMany();
+  await prisma.childGuardianAccess.deleteMany();
   await prisma.pairingInvitation.deleteMany();
   await prisma.childProfile.deleteMany();
   await prisma.familyMembership.deleteMany();

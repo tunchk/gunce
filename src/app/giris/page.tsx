@@ -40,6 +40,11 @@ export default function SignInPage() {
           </Button>
         </form>
         <p className="mt-4 text-sm" style={{ color: "var(--muted)" }}>
+          <Link href="/veli/sifremi-unuttum" className="font-semibold underline">
+            Şifremi unuttum
+          </Link>
+        </p>
+        <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
           Hesabın yok mu?{" "}
           <Link href="/kayit" className="font-semibold underline">
             Kayıt ol

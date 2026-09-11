@@ -394,22 +394,17 @@ export async function listUnlinkedStudySteps(childUserId: string) {
   return steps.map(toStudyStepViewFromRow);
 }
 
-/** Parent read-only goals for family children — never includes journal fields. */
+/** Parent read-only goals for accessible children — never includes journal fields. */
 export async function getParentGoals(parentUserId: string) {
-  const membership = await prisma.familyMembership.findUnique({
-    where: { userId: parentUserId },
-  });
-  if (!membership) {
-    return { children: [] as const };
-  }
-
-  const children = await prisma.childProfile.findMany({
-    where: { familyId: membership.familyId },
+  const accesses = await prisma.childGuardianAccess.findMany({
+    where: { userId: parentUserId, revokedAt: null },
+    include: { child: true },
     orderBy: { createdAt: "asc" },
   });
 
   const result = [];
-  for (const child of children) {
+  for (const access of accesses) {
+    const child = access.child;
     if (!child.userId) continue;
     const listed = await listGoalsForChild(child.userId);
     const details: GoalDetailView[] = [];
