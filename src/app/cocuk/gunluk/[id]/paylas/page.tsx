@@ -26,6 +26,7 @@ export default async function ShareReviewPage({ params }: Props) {
     <Shell
       title="Ne paylaşılacak?"
       subtitle="Soldaki özel yazın sende kalır. Velinin göreceği metni ayrıca hazırlarsın."
+      withChildNav
     >
       <Panel>
         <SharingPanel entry={entry} />

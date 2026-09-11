@@ -46,7 +46,13 @@ export function PlanParentNotice() {
   );
 }
 
-export function NextStudyStepPanel({ step }: { step: StudyStepView | null }) {
+export function NextStudyStepPanel({
+  step,
+  compact = false,
+}: {
+  step: StudyStepView | null;
+  compact?: boolean;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
@@ -147,14 +153,19 @@ export function NextStudyStepPanel({ step }: { step: StudyStepView | null }) {
       <div>
         <h2 className="text-lg font-semibold">Sıradaki adımım</h2>
         <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-          Bugün için planlanmış bir çalışma adımı yok. Haftana bakıp bir gün seçebilirsin.
+          Bugün için seçilmiş bir çalışma adımı yok. İstersen haftalık plana bir şey ekleyebilirsin.
         </p>
-        <Link
-          href="/cocuk/haftam"
-          className="mt-3 inline-flex min-h-12 items-center text-sm font-semibold underline"
-        >
-          Haftama bak
-        </Link>
+        <div className="mt-3 flex flex-col gap-2">
+          <Link href="/cocuk/plan/yeni" className="block">
+            <Button variant="secondary">Plan ekle</Button>
+          </Link>
+          <Link
+            href="/cocuk/haftam"
+            className="inline-flex min-h-12 items-center justify-center text-sm font-semibold underline"
+          >
+            Haftalık plana git
+          </Link>
+        </div>
       </div>
     );
   }
@@ -165,26 +176,39 @@ export function NextStudyStepPanel({ step }: { step: StudyStepView | null }) {
       <p className="mt-2 text-base font-medium">{step.title}</p>
       <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
         {studyStepMeta(step)}
+        {step.status === "IN_PROGRESS" ? " · Yapıyorum" : null}
       </p>
       {!moving ? (
         <div className="mt-4 flex flex-col gap-2">
           <Button type="button" disabled={pending} onClick={() => void complete()}>
             Tamamladım
           </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={pending}
-            onClick={() => setMoving(true)}
-          >
-            Başka güne taşı
-          </Button>
-          <Link
-            href={`/cocuk/plan/adim/${step.id}`}
-            className="inline-flex min-h-11 items-center justify-center text-sm font-semibold underline"
-          >
-            Düzenle
-          </Link>
+          {!compact ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => setMoving(true)}
+            >
+              Başka güne taşı
+            </Button>
+          ) : (
+            <Link
+              href={`/cocuk/plan/adim/${step.id}`}
+              className="inline-flex min-h-12 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
+              style={{ background: "var(--accent-soft)" }}
+            >
+              Adımı aç
+            </Link>
+          )}
+          {!compact ? (
+            <Link
+              href={`/cocuk/plan/adim/${step.id}`}
+              className="inline-flex min-h-11 items-center justify-center text-sm font-semibold underline"
+            >
+              Düzenle
+            </Link>
+          ) : null}
         </div>
       ) : (
         <div className="mt-4 space-y-3">

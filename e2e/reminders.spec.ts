@@ -28,7 +28,11 @@ test("child reminders settings page loads (simulated; not real push delivery)", 
   await ctx.addCookies(parseCookieHeader(childCookie));
   const page = await ctx.newPage();
 
-  await page.goto("/cocuk/hatirlatmalar");
+  await page.goto("/cocuk/ana");
+  await expect(page.getByRole("link", { name: "Ayarlar" })).toBeVisible();
+  await page.getByRole("link", { name: "Ayarlar" }).click();
+  await expect(page.getByRole("heading", { name: "Ayarlar" })).toBeVisible();
+  await page.getByRole("button", { name: "Hatırlatmaları aç" }).click();
   await expect(page.getByRole("heading", { name: "Hatırlatmalar" })).toBeVisible({
     timeout: 15_000,
   });
@@ -42,7 +46,7 @@ test("child reminders settings page loads (simulated; not real push delivery)", 
   await expect(page.getByLabel("Günlük yazma daveti")).toBeChecked();
 
   await page.goto("/cocuk/ana");
-  await expect(page.getByRole("link", { name: "Hatırlatmalar" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Ayarlar" })).toBeVisible();
 
   await ctx.close();
 });

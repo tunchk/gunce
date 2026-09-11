@@ -28,7 +28,7 @@ export default async function StudyStepDetailPage({
   const linkables = await listCommitmentsForLinking(session.user.id);
 
   return (
-    <Shell title={step.title} subtitle="Çalışma adımını düzenle veya başka güne taşı.">
+    <Shell title={step.title} subtitle="Çalışma adımını düzenle veya başka güne taşı." withChildNav>
       <div className="space-y-4">
         <Panel>
           <StudyStepEditor step={step} linkables={linkables} />
@@ -37,7 +37,7 @@ export default async function StudyStepDetailPage({
           href="/cocuk/haftam"
           className="inline-flex min-h-12 items-center text-sm font-semibold underline"
         >
-          Haftama dön
+          Planıma dön
         </Link>
       </div>
     </Shell>

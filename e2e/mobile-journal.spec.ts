@@ -102,7 +102,7 @@ for (const vp of VIEWPORTS) {
     await expect(page.locator("#journal-body")).toHaveValue(writing);
     await assertNoHorizontalOverflow(page);
 
-    await page.getByRole("link", { name: "Paylaşımı hazırla" }).click();
+    await page.getByRole("button", { name: "Paylaşımı hazırla" }).click();
     await expect(page.getByRole("heading", { name: "Velimin göreceği" })).toBeVisible({
       timeout: 10_000,
     });

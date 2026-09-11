@@ -42,7 +42,7 @@ test("create step → Pano Başla → Tamamladım → Hafta agrees", async ({ br
   await page.getByLabel("Planlanan gün (isteğe bağlı)").fill(today);
   await page.getByLabel("Tahmini süre (dk, isteğe bağlı)").fill("12");
   await page.getByRole("button", { name: "Kaydet" }).click();
-  await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("tab", { name: "Pano" }).click();
   await expect(page.getByRole("tab", { name: "Pano" })).toHaveAttribute(
@@ -74,7 +74,7 @@ test("create step → Pano Başla → Tamamladım → Hafta agrees", async ({ br
 
   await page.getByRole("link", { name: /Pano deneme adımı/ }).first().click();
   await expect(page.getByText(/Durum: Tamamladım/)).toBeVisible({ timeout: 10_000 });
-  await page.getByRole("link", { name: "Haftama dön" }).click();
+  await page.getByRole("link", { name: "Planıma dön" }).click();
 
   await page.getByRole("tab", { name: "Pano" }).click();
   await page.locator(".md\\:hidden").getByRole("tab", { name: /Tamamladım/ }).click();

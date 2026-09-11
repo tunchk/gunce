@@ -52,8 +52,10 @@ test("exam → prep steps → complete/reschedule → parent read-only", async (
 
   await page.goto("/cocuk/ana");
   await expect(page.getByRole("heading", { name: "Günümü anlat" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Haftama bak" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Haftalık plana git" })).toBeVisible();
 
+  await page.getByRole("navigation", { name: "Çocuk gezinti" }).getByRole("link", { name: "Planım" }).click();
+  await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible();
   await page.getByRole("button", { name: "Plan ekle" }).click();
   await expect(page.getByRole("heading", { name: "Plan ekle" })).toBeVisible();
 
@@ -80,7 +82,7 @@ test("exam → prep steps → complete/reschedule → parent read-only", async (
   await page.getByLabel("Planlanan gün (isteğe bağlı)").fill(wednesday);
   await page.getByLabel("Tahmini süre (dk, isteğe bağlı)").fill("10");
   await page.getByRole("button", { name: "Kaydet" }).click();
-  await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("button", { name: "Plan ekle" }).click();
   await page.getByRole("button", { name: "Çalışma / hazırlık adımı" }).click();
@@ -89,7 +91,7 @@ test("exam → prep steps → complete/reschedule → parent read-only", async (
   await page.getByLabel("Tahmini süre (dk, isteğe bağlı)").fill("15");
   await page.getByLabel("Bağlı ödev / sınav (isteğe bağlı)").selectOption({ index: 1 });
   await page.getByRole("button", { name: "Kaydet" }).click();
-  await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
 
   // Open Wednesday step via day selector — weekday short labels
   await page.getByRole("button").filter({ hasText: "Çar" }).nth(0).click();
@@ -99,13 +101,13 @@ test("exam → prep steps → complete/reschedule → parent read-only", async (
     timeout: 10_000,
   });
 
-  await page.getByRole("link", { name: "Haftama dön" }).click();
+  await page.getByRole("link", { name: "Planıma dön" }).click();
   await page.getByRole("button").filter({ hasText: "Per" }).nth(0).click();
   await page.getByRole("link", { name: /Kendimi dene/ }).first().click();
   await page.getByLabel("Planlanan gün").fill(friday);
   await page.getByRole("button", { name: "Değişiklikleri kaydet" }).click();
   await expect(page.getByText(/Kaydedilemedi|Bağlantı/)).toHaveCount(0);
-  await page.getByRole("link", { name: "Haftama dön" }).click();
+  await page.getByRole("link", { name: "Planıma dön" }).click();
 
   // Exam still Friday — open Cum day and find exam
   await page.getByRole("button").filter({ hasText: "Cum" }).nth(0).click();

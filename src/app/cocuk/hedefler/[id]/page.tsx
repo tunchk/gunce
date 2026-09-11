@@ -31,7 +31,7 @@ export default async function GoalDetailPage({
   }
 
   return (
-    <Shell title={goal.title} subtitle="Hedefini düzenle, küçük adımlar ekle veya tamamla.">
+    <Shell title={goal.title} subtitle="Hedefini düzenle, küçük adımlar ekle veya tamamla." withChildNav>
       <div className="space-y-4">
         <GoalParentNotice />
         <Panel>

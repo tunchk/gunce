@@ -43,40 +43,48 @@ export default async function ParentHomePage() {
     }
   }
 
+  const childGoals = goalsData.children[0]?.goals ?? [];
+  const activeGoals = childGoals.filter((g) => g.status === "ACTIVE");
+
   return (
     <Shell
       title={`Merhaba, ${session.user.name}`}
       subtitle="Yalnızca çocuğunun seninle paylaştığı içerikler ve planı burada görünür."
       wide
+      headerAction={
+        <Link
+          href="/veli/ayarlar"
+          className="inline-flex min-h-11 items-center justify-center rounded-2xl px-3 text-sm font-semibold"
+          style={{ border: "1px solid var(--line)" }}
+        >
+          Ayarlar
+        </Link>
+      }
     >
       <div className="space-y-4">
         <Panel>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl" aria-hidden>
-                {avatarEmoji(child.avatarKey)}
-              </span>
-              <div>
-                <p className="font-semibold">{child.displayName}</p>
-                <p className="text-sm" style={{ color: "var(--muted)" }}>
-                  Paylaşımlarını ve haftalık planını buradan takip edebilirsin.
-                </p>
-              </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-3xl" aria-hidden>
+              {avatarEmoji(child.avatarKey)}
+            </span>
+            <div>
+              <p className="font-semibold">{child.displayName}</p>
+              <p className="text-sm" style={{ color: "var(--muted)" }}>
+                Eşleştirme ve oturum yönetimi Ayarlar’da.
+              </p>
             </div>
-            <Link
-              href="/veli/ayarlar"
-              className="inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
-              style={{ border: "1px solid var(--line)" }}
-            >
-              Aile ayarları
-            </Link>
           </div>
         </Panel>
+
+        <ParentSharedSections
+          messages={shared.messages}
+          supportRequests={shared.supportRequests}
+        />
 
         <Panel>
           <h2 className="text-lg font-semibold">Haftanın planı</h2>
           <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            Planı çocuk yönetir. Sen yalnızca okuyabilirsin; günlük yazıları buraya karışmaz.
+            Salt okunur. Günlük yazıları buraya karışmaz.
           </p>
           {childPlan ? (
             <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
@@ -89,7 +97,7 @@ export default async function ParentHomePage() {
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
-              {upcoming.slice(0, 5).map((item) => (
+              {upcoming.slice(0, 3).map((item) => (
                 <li
                   key={`${item.date}-${item.title}`}
                   className="rounded-2xl border px-3 py-3 text-sm"
@@ -117,45 +125,30 @@ export default async function ParentHomePage() {
 
         <Panel>
           <h2 className="text-lg font-semibold">Hedefler</h2>
-          <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            Uzun vadeli hedefler salt okunur; günlük metinler buraya karışmaz.
-          </p>
-          {(() => {
-            const childGoals = goalsData.children[0]?.goals ?? [];
-            const active = childGoals.filter((g) => g.status === "ACTIVE");
-            if (active.length === 0) {
-              return (
-                <p className="mt-3 text-sm" style={{ color: "var(--muted)" }}>
-                  Aktif hedef yok.
-                </p>
-              );
-            }
-            return (
-              <ul className="mt-3 space-y-2">
-                {active.slice(0, 3).map((g) => (
-                  <li
-                    key={g.id}
-                    className="rounded-2xl border px-3 py-3 text-sm"
-                    style={{ borderColor: "var(--line)" }}
-                  >
-                    <span className="font-semibold">{g.title}</span>
-                    <span className="mt-1 block" style={{ color: "var(--muted)" }}>
-                      {g.progress.label}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            );
-          })()}
+          {activeGoals.length === 0 ? (
+            <p className="mt-3 text-sm" style={{ color: "var(--muted)" }}>
+              Aktif hedef yok.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {activeGoals.slice(0, 3).map((g) => (
+                <li
+                  key={g.id}
+                  className="rounded-2xl border px-3 py-3 text-sm"
+                  style={{ borderColor: "var(--line)" }}
+                >
+                  <span className="font-semibold">{g.title}</span>
+                  <span className="mt-1 block" style={{ color: "var(--muted)" }}>
+                    {g.progress.label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           <Link href="/veli/hedefler" className="mt-4 block">
             <Button variant="ghost">Hedefleri aç</Button>
           </Link>
         </Panel>
-
-        <ParentSharedSections
-          messages={shared.messages}
-          supportRequests={shared.supportRequests}
-        />
 
         <form action={signOutAction}>
           <Button type="submit" variant="ghost">

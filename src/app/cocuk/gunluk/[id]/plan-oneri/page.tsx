@@ -39,6 +39,7 @@ export default async function PlanExtractPage({ params }: Props) {
     <Shell
       title="Plan önerileri"
       subtitle="Yazından çıkan adayları gözden geçir; seçtiklerini haftalık planına ekle."
+      withChildNav
     >
       <div className="space-y-4">
         <Panel>

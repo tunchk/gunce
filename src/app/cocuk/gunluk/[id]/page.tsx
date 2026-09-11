@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DeleteEntryButton } from "@/components/delete-entry-button";
 import { JournalEditor } from "@/components/journal-editor";
-import { Button, Panel, Shell } from "@/components/ui";
+import { GuardedLink } from "@/components/navigation-guard";
+import { ChildSettingsLink, Panel, Shell } from "@/components/ui";
 import { getAiFeatureStatus } from "@/lib/ai";
 import { PROMPT_OPTIONS } from "@/lib/constants";
 import { getChildEntry, JournalError } from "@/lib/journal";
@@ -31,7 +31,9 @@ export default async function JournalEntryPage({ params }: Props) {
   return (
     <Shell
       title={prompt?.label ?? "Günlük yazısı"}
-      subtitle={prompt?.question ?? "Düşüncelerini yaz; paylaşmak istersen sonraki adımda seçersin."}
+      subtitle="Önce anlat veya yaz. Paylaşmak ve plana eklemek isteğe bağlıdır."
+      withChildNav
+      headerAction={<ChildSettingsLink />}
     >
       <div className="space-y-4">
         <Panel>
@@ -46,15 +48,14 @@ export default async function JournalEntryPage({ params }: Props) {
           />
         </Panel>
 
-        <Link href={`/cocuk/gunluk/${entry.id}/paylas`}>
-          <Button variant="secondary">Paylaşımı hazırla</Button>
-        </Link>
-
         <DeleteEntryButton entryId={entry.id} />
 
-        <Link href="/cocuk/gunluk" className="inline-flex min-h-12 items-center font-semibold underline">
+        <GuardedLink
+          href="/cocuk/gunluk"
+          className="inline-flex min-h-12 items-center font-semibold underline"
+        >
           Günlüğe dön
-        </Link>
+        </GuardedLink>
       </div>
     </Shell>
   );

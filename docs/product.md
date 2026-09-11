@@ -113,7 +113,7 @@ Children describe their day by voice or text, edit the resulting summary, manage
 
 **Out of scope for Milestone 6:** automatic scheduling, recurrence, notifications, smartwatch, automatic goal creation.
 
-## Milestone 7 — Child reminders + Web Push (current)
+## Milestone 7 — Child reminders + Web Push
 
 - Optional **Hatırlatmalar** settings (off by default): daily journal invitation time, global study-step reminders, quiet hours (default 21:00–08:00)
 - Browser permission only after **Bu cihazda bildirimleri aç**; distinguishes app prefs / permission / device registration
@@ -125,6 +125,30 @@ Children describe their day by voice or text, edit the resulting summary, manage
 - iOS: Home Screen install guidance when relevant; localhost does not prove real-phone/closed-app delivery
 
 **Out of scope for Milestone 7:** parent notifications, email/SMS, recurring study tasks, smartwatch, automatic exam/goal notifications.
+
+## Milestone 8 — Daily experience
+
+Presentation and navigation polish only — no new domain features.
+
+- Child home (`/cocuk/ana`): primary **Günümü anlat**, compact **Sıradaki adımım**, small **Bu hafta** overview, shortcuts to Günlüğüm / Hedeflerim; reminders under **Ayarlar**
+- Fixed child nav: **Ana · Günlüğüm · Planım · Hedeflerim** (labels + icons; current destination marked)
+- Journal list shows date, private preview, accurate share state (**Bende kalacak** vs **Velin şunu görecek**)
+- Journal editor stages: Anlat/yaz → Gözden geçir → İstersen paylaş veya planına ekle (not a mandatory wizard); save feedback Kaydediliyor… / Kaydedildi / actionable error
+- Parent home: recent shares and support first, then compact plan/goals; support-only shares stay visible; pairing stays in Ayarlar
+- Mobile-first spacing, ≥44px targets, reduced-motion respect, nav does not cover content
+
+**Out of scope for Milestone 8:** hosting, new notifications, new AI, parent plan edits, offline private storage.
+
+## Milestone 8.1 — Safe journal navigation (current)
+
+- In-app leaves (bottom nav, guarded links, share/plan actions) await a successful save when text is dirty; failed saves stay in the editor with retry or explicit **Kaydetmeden çık**
+- Pending voice (recording / unapplied transcript / in-memory audio) prompts **Sayfada kal** / **Sesi bırak ve çık**; discard cleans mic tracks and ignores late transcription
+- Native `beforeunload` for refresh/tab close when text or voice work is at risk (browsers may still suppress async save on hard exit)
+- Browser Back: history sentinel + leave pipeline (best-effort; App Router has no `beforePopState`). Documented limitation: some mobile swipe-back gestures may still bypass soft guards
+- Labels: **Planıma dön** for shared Hafta/Pano destination
+- Authenticated visual checks via Playwright screenshots at 360px and desktop (`e2e/m81-visual.spec.ts`)
+
+**Out of scope for Milestone 8.1:** new product features, offline audio persistence, hosting.
 
 ## Design principles
 

@@ -21,6 +21,7 @@ import {
   progressLabel,
   type VoiceSegment,
 } from "@/lib/voice-segments";
+import { useNavigationGuard } from "@/components/navigation-guard";
 
 type UiPhase =
   | "idle"
@@ -72,6 +73,7 @@ export function VoiceRecorder({
   const [assembledDraft, setAssembledDraft] = useState("");
   const [showParts, setShowParts] = useState(false);
   const [busyGuard, setBusyGuard] = useState(false);
+  const { registerVoiceGuard } = useNavigationGuard();
 
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -91,6 +93,8 @@ export function VoiceRecorder({
   const sessionIdRef = useRef<string | null>(null);
   const revisionRef = useRef(expectedRevision);
   const limitMsRef = useRef(SEGMENT_MAX_MS);
+  const abandonGenerationRef = useRef(0);
+  const phaseRef = useRef<UiPhase>("idle");
 
   useEffect(() => {
     segmentsRef.current = segments;
@@ -101,6 +105,9 @@ export function VoiceRecorder({
   useEffect(() => {
     revisionRef.current = expectedRevision;
   }, [expectedRevision]);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const stopTracks = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -144,6 +151,70 @@ export function VoiceRecorder({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [phase]);
 
+  const discardPendingVoice = useCallback(() => {
+    abandonGenerationRef.current += 1;
+    phaseRef.current = "idle";
+    try {
+      mediaRef.current?.stop();
+    } catch {
+      /* ignore */
+    }
+    mediaRef.current = null;
+    stopTracks();
+    releaseAllAudio();
+    queueRef.current = [];
+    inflightRef.current.clear();
+    activeJobsRef.current = 0;
+    currentSegmentIdRef.current = null;
+    stopReasonRef.current = "cancel";
+    appliedOnceRef.current = false;
+    startingRef.current = false;
+    segmentsRef.current = [];
+    setSegments([]);
+    setSessionId(null);
+    sessionIdRef.current = null;
+    setAssembledDraft("");
+    setPhase("idle");
+    setError(undefined);
+    setNotice(undefined);
+    setSoftWarn(false);
+    setElapsed(0);
+    setBusyGuard(false);
+  }, [releaseAllAudio, stopTracks]);
+
+  useEffect(() => {
+    registerVoiceGuard({
+      isBlocking: () => {
+        const p = phaseRef.current;
+        return (
+          p === "recording" ||
+          p === "between" ||
+          p === "finishing" ||
+          p === "review" ||
+          hasRecoverableAudioRisk(segmentsRef.current)
+        );
+      },
+      message: () => {
+        const p = phaseRef.current;
+        if (p === "recording") {
+          return "Kayıt sürüyor. Çıkarsan bu ses kaybolur (ses dosyası saklanmaz).";
+        }
+        if (p === "review") {
+          return "Henüz yazına eklenmemiş bir ses çözümü var. Çıkarsan bu çözüm kaybolur; yazındaki kayıtlı metin durur.";
+        }
+        if (
+          hasUnresolvedSegments(segmentsRef.current) ||
+          hasRecoverableAudioRisk(segmentsRef.current)
+        ) {
+          return "Henüz bitmemiş veya yazına eklenmemiş ses bölümlerin var. Çıkarsan bunlar kaybolur.";
+        }
+        return "Kaydedilmemiş ses çalışman var. Çıkarsan kaybolur.";
+      },
+      discard: discardPendingVoice,
+    });
+    return () => registerVoiceGuard(null);
+  }, [discardPendingVoice, registerVoiceGuard]);
+
   const pumpQueue = useCallback(() => {
     while (
       activeJobsRef.current < TRANSCRIBE_CONCURRENCY &&
@@ -164,6 +235,7 @@ export function VoiceRecorder({
 
       inflightRef.current.add(nextId);
       activeJobsRef.current += 1;
+      const generationAtStart = abandonGenerationRef.current;
       setSegments((prev) =>
         prev.map((s) =>
           s.id === nextId && s.status !== "completed"
@@ -191,6 +263,10 @@ export function VoiceRecorder({
             error?: string;
             notice?: string;
           };
+
+          if (abandonGenerationRef.current !== generationAtStart) {
+            return;
+          }
 
           const latest = segmentsRef.current.find((s) => s.id === nextId);
           if (

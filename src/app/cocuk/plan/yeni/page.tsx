@@ -20,7 +20,7 @@ export default async function PlanCreatePage({
   const params = await searchParams;
 
   return (
-    <Shell title="Plan ekle" subtitle="Ne eklemek istediğini seç, sonra sadece gerekli alanları doldur.">
+    <Shell title="Plan ekle" subtitle="Ne eklemek istediğini seç, sonra sadece gerekli alanları doldur." withChildNav>
       <div className="space-y-4">
         <PlanParentNotice />
         <Panel>
@@ -32,7 +32,7 @@ export default async function PlanCreatePage({
           href="/cocuk/haftam"
           className="inline-flex min-h-12 items-center text-sm font-semibold underline"
         >
-          Haftama dön
+          Planıma dön
         </Link>
       </div>
     </Shell>

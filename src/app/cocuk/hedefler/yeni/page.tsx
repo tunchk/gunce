@@ -13,7 +13,7 @@ export default async function GoalCreatePage() {
   if (child.onboardingStep !== "COMPLETE") redirect("/cocuk");
 
   return (
-    <Shell title="Yeni hedef" subtitle="Başlık yeterli; istersen sonra küçük adımlar eklersin.">
+    <Shell title="Yeni hedef" subtitle="Başlık yeterli; istersen sonra küçük adımlar eklersin." withChildNav>
       <div className="space-y-4">
         <GoalParentNotice />
         <Panel>

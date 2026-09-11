@@ -1,37 +1,81 @@
 import Link from "next/link";
+import { ChildNav } from "@/components/child-nav";
+import {
+  GuardedLink,
+  NavigationGuardProvider,
+} from "@/components/navigation-guard";
 
 type Props = {
   children: React.ReactNode;
   title?: string;
   subtitle?: string;
   wide?: boolean;
+  /** Fixed child bottom navigation (Ana / Günlüğüm / Planım / Hedeflerim). */
+  withChildNav?: boolean;
+  /** Optional top-right action (e.g. Ayarlar). */
+  headerAction?: React.ReactNode;
 };
 
-export function Shell({ children, title, subtitle, wide }: Props) {
-  return (
-    <main className="mx-auto w-full px-4 py-8 sm:px-6" style={{ maxWidth: wide ? 720 : 480 }}>
-      <header className="mb-8">
-        <Link
-          href="/"
-          className="inline-block text-3xl font-semibold tracking-tight"
-          style={{ fontFamily: "var(--font-display-loaded), var(--font-display)" }}
-        >
-          Günce
-        </Link>
-        {title ? (
-          <h1 className="mt-4 text-2xl font-semibold leading-tight sm:text-3xl">{title}</h1>
-        ) : null}
-        {subtitle ? <p className="mt-2 text-base leading-relaxed" style={{ color: "var(--muted)" }}>{subtitle}</p> : null}
-      </header>
-      {children}
-    </main>
+export function Shell({
+  children,
+  title,
+  subtitle,
+  wide,
+  withChildNav,
+  headerAction,
+}: Props) {
+  const body = (
+    <>
+      <main
+        className={`mx-auto w-full px-4 py-8 sm:px-6 ${withChildNav ? "pb-36" : ""}`}
+        style={{ maxWidth: wide ? 720 : 480 }}
+      >
+        <header className="mb-8">
+          <div className="flex items-start justify-between gap-3">
+            {withChildNav ? (
+              <GuardedLink
+                href="/cocuk/ana"
+                className="inline-block text-3xl font-semibold tracking-tight"
+                style={{ fontFamily: "var(--font-display-loaded), var(--font-display)" }}
+              >
+                Günce
+              </GuardedLink>
+            ) : (
+              <Link
+                href="/"
+                className="inline-block text-3xl font-semibold tracking-tight"
+                style={{ fontFamily: "var(--font-display-loaded), var(--font-display)" }}
+              >
+                Günce
+              </Link>
+            )}
+            {headerAction ? (
+              <div className="shrink-0 pt-1">{headerAction}</div>
+            ) : null}
+          </div>
+          {title ? (
+            <h1 className="mt-4 text-2xl font-semibold leading-tight sm:text-3xl">{title}</h1>
+          ) : null}
+          {subtitle ? (
+            <p className="mt-2 text-base leading-relaxed" style={{ color: "var(--muted)" }}>
+              {subtitle}
+            </p>
+          ) : null}
+        </header>
+        {children}
+      </main>
+      {withChildNav ? <ChildNav /> : null}
+    </>
   );
+
+  if (!withChildNav) return body;
+  return <NavigationGuardProvider>{body}</NavigationGuardProvider>;
 }
 
-export function Panel({ children }: { children: React.ReactNode }) {
+export function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <section
-      className="p-5 sm:p-6"
+      className={`p-5 sm:p-6 ${className}`}
       style={{
         background: "var(--surface)",
         border: "1px solid var(--line)",
@@ -163,5 +207,18 @@ export function SoonBadge() {
     >
       Yakında
     </span>
+  );
+}
+
+/** Compact child header link to settings (reminders, sign-out). */
+export function ChildSettingsLink() {
+  return (
+    <GuardedLink
+      href="/cocuk/ayarlar"
+      className="inline-flex min-h-11 items-center justify-center rounded-2xl px-3 text-sm font-semibold"
+      style={{ border: "1px solid var(--line)", color: "var(--muted)" }}
+    >
+      Ayarlar
+    </GuardedLink>
   );
 }

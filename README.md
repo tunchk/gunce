@@ -89,7 +89,7 @@ npm run typecheck
 npm run build
 npm test
 npm run reminders:process          # yerel zamanlayıcı (VAPID + DB gerekir)
-npm run build && npm run test:e2e  # Playwright; Chromium gerekir
+npm run build && npm run test:e2e  # Playwright; Chromium gerekir (next start güncel build ister)
 ```
 
 ### Hatırlatmalar (Milestone 7)
@@ -112,9 +112,10 @@ npm run build && npm run test:e2e  # Playwright; Chromium gerekir
 5. Veli ana ekranında yalnızca yayınlanan anlık görüntüyü gör; özel metin / transkript / öneri görünmez.
 6. **Paylaşımı geri çek** → velinin uygulamada görmesi durur; daha önce okunan bilgi geri alınamaz.
 7. Çocuk: **Plan ekle** → örn. Cuma “Almanca kelime sınavı” → Çarşamba/Perşembe hazırlık adımları → **Tamamladım** / **Başka güne taşı**. Sınav tarihi değişmez.
-8. **Haftam** içinde **Hafta** / **Pano** görünümleri; panoda **Başla** → **Tamamladım**. Aynı adımlar her iki görünümde.
-9. Veli: **Haftanın planı** salt okunur (durum etiketleriyle); planı düzenleyemez. Plan API’leri günlük metni taşımaz.
+8. **Planım** (`/cocuk/haftam`) içinde **Hafta** / **Pano** görünümleri; panoda **Başla** → **Tamamladım**. Aynı adımlar her iki görünümde. Alt gezinti: Ana · Günlüğüm · Planım · Hedeflerim.
+9. Veli: ana ekranda paylaşımlar önce; **Haftanın planı** salt okunur; planı düzenleyemez. Plan API’leri günlük metni taşımaz.
 10. Çocuk: **Hedeflerim** → hedef + adımlar; panoda tamamla → ilerleme güncellenir. Veli **Hedefler** salt okunur.
+11. Hatırlatmalar: çocuk **Ayarlar** → Hatırlatmalar (ana akışın dışında).
 
 ### Mikrofon (manuel kontrol listesi)
 
@@ -133,10 +134,11 @@ Ses ve metin, yapılandırılmış OpenAI uç noktalarına gönderilir. Uygulama
 
 ## Bilinen sınırlamalar
 
-- Uzun vadeli hedefler, bildirimler, tekrarlayan programlar, yapay zekâ ile otomatik görev çıkarma **yok**.
+- Bildirimler, tekrarlayan programlar, yapay zekâ ile otomatik görev planlaması sınırlı veya isteğe bağlıdır (bkz. kilometre taşları).
 - E-posta doğrulama ve şifre sıfırlama **yok**.
 - Canlı OpenAI çağrıları anahtar olmadan doğrulanmaz; testler deterministik stub kullanır.
 - Çok bölümlü seste işlenmemiş ses yalnızca bellektemedir; yenileme / sekme kapatma / çökmede kaybolur.
+- Milestone 8 sunum iyileştirmesidir; gerçek telefon mikrofonu / kapalı-uygulama push kanıtı değildir.
 - Anlatım oturumu en fazla 12 bölüm (bölüm başı ~120 sn); görünmez arka plan dilimleme yok.
 - Plan tahmini dakikaları planlanan çabadır; ölçülen çalışma süresi veya ustalık çıkarımı yok.
 - Rate limit uygulama/DB düzeyinde; üretimde ek kenar koruması önerilir.

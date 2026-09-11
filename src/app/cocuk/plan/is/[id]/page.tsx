@@ -27,7 +27,7 @@ export default async function CommitmentDetailPage({
   }
 
   return (
-    <Shell title={data.commitment.title} subtitle="Ödev, sınav veya etkinliği düzenle.">
+    <Shell title={data.commitment.title} subtitle="Ödev, sınav veya etkinliği düzenle." withChildNav>
       <div className="space-y-4">
         <Panel>
           <CommitmentEditor
@@ -39,7 +39,7 @@ export default async function CommitmentDetailPage({
           href="/cocuk/haftam"
           className="inline-flex min-h-12 items-center text-sm font-semibold underline"
         >
-          Haftama dön
+          Planıma dön
         </Link>
       </div>
     </Shell>

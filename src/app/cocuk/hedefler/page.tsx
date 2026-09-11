@@ -20,7 +20,7 @@ export default async function ChildGoalsPage() {
   const goals = await listGoalsForChild(session.user.id);
 
   return (
-    <Shell title="Hedeflerim" subtitle="Uzun vadeli niyetlerini küçük adımlara böl.">
+    <Shell title="Hedeflerim" subtitle="Uzun vadeli niyetlerini küçük adımlara böl." withChildNav>
       <div className="space-y-4">
         <GoalParentNotice />
         <Link href="/cocuk/hedefler/yeni" className="block">

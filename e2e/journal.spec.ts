@@ -81,7 +81,7 @@ test("child shares selected content; parent sees only that; withdraw hides it", 
   await parentPage.reload();
   await expect(parentPage.getByText("Velinin göreceği kısa not")).toHaveCount(0);
   await expect(
-    parentPage.getByText("Henüz seninle paylaşılmış bir mesaj yok"),
+    parentPage.getByText("Henüz seninle paylaşılmış bir içerik yok"),
   ).toBeVisible();
 
   const childCtx = await browser.newContext();

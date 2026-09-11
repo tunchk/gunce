@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChildEntryView } from "@/lib/journal";
 import { getAiFeatureStatusClientHint } from "@/lib/ai/client-status";
+import { useNavigationGuard } from "@/components/navigation-guard";
 import { VoiceRecorder } from "@/components/voice-recorder";
 
 type SaveState = "idle" | "saving" | "saved" | "failed" | "conflict";
@@ -21,6 +21,7 @@ export function JournalEditor({
     planExtractAvailable: boolean;
   };
 }) {
+  const { registerTextGuard, tryNavigate } = useNavigationGuard();
   const [body, setBody] = useState(initial.body);
   const [revision, setRevision] = useState(initial.revision);
   const [originalBody, setOriginalBody] = useState(initial.originalBody);
@@ -34,14 +35,36 @@ export function JournalEditor({
   const [error, setError] = useState<string | undefined>();
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [summaryMsg, setSummaryMsg] = useState<string | undefined>();
+  const [persistedBody, setPersistedBody] = useState(initial.body);
   const latestRef = useRef({ body: initial.body, revision: initial.revision });
+  const persistedBodyRef = useRef(initial.body);
+  const saveStateRef = useRef<SaveState>("idle");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seqRef = useRef(0);
   const summarySeqRef = useRef(0);
+  const dirtyRef = useRef(false);
+  const savePromiseRef = useRef<Promise<boolean> | null>(null);
 
   useEffect(() => {
     latestRef.current = { body, revision };
-  }, [body, revision]);
+    persistedBodyRef.current = persistedBody;
+    saveStateRef.current = saveState;
+    dirtyRef.current =
+      body !== persistedBody ||
+      saveState === "saving" ||
+      saveState === "failed" ||
+      saveState === "conflict";
+  }, [body, revision, persistedBody, saveState]);
+
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (!dirtyRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   const applyEntry = useCallback((entry: ChildEntryView) => {
     setBody(entry.body);
@@ -50,66 +73,150 @@ export function JournalEditor({
     setAcceptedSummary(entry.acceptedSummary);
     setSuggestion(entry.latestSuggestion);
     setSuggestionDraft(entry.latestSuggestion?.suggestedText ?? "");
+    setPersistedBody(entry.body);
+    persistedBodyRef.current = entry.body;
     latestRef.current = { body: entry.body, revision: entry.revision };
   }, []);
 
   const save = useCallback(
     async (opts?: { markSaved?: boolean; bodyOverride?: string }) => {
-      const seq = ++seqRef.current;
-      const payloadBody = opts?.bodyOverride ?? latestRef.current.body;
-      const expectedRevision = latestRef.current.revision;
-      setSaveState("saving");
-      setError(undefined);
+      const run = async () => {
+        const seq = ++seqRef.current;
+        const payloadBody = opts?.bodyOverride ?? latestRef.current.body;
+        const expectedRevision = latestRef.current.revision;
+        setSaveState("saving");
+        saveStateRef.current = "saving";
+        setError(undefined);
 
+        try {
+          const res = await fetch(`/api/child/journal/${entryId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              op: "update_body",
+              body: payloadBody,
+              expectedRevision,
+              markSaved: opts?.markSaved ?? true,
+            }),
+          });
+          const data = (await res.json()) as {
+            entry?: ChildEntryView;
+            error?: string;
+          };
+
+          if (seq !== seqRef.current) return false;
+
+          if (res.status === 401) {
+            setSaveState("failed");
+            saveStateRef.current = "failed";
+            setError(
+              "Oturumun sona erdi. Kaydedilmeyen metin bu cihazda duruyor; yeniden giriş yapıp kopyalayabilirsin.",
+            );
+            return false;
+          }
+          if (res.status === 409) {
+            setSaveState("conflict");
+            saveStateRef.current = "conflict";
+            setError(data.error || "Başka bir değişiklik var. Sayfayı yenile.");
+            return false;
+          }
+          if (!res.ok || !data.entry) {
+            setSaveState("failed");
+            saveStateRef.current = "failed";
+            setError(data.error || "Kaydedilemedi. Tekrar dene; metnin ekranda duruyor.");
+            return false;
+          }
+
+          applyEntry(data.entry);
+          setSaveState("saved");
+          saveStateRef.current = "saved";
+          return true;
+        } catch {
+          if (seq === seqRef.current) {
+            setSaveState("failed");
+            saveStateRef.current = "failed";
+            setError("Bağlantı hatası. Metnin kaybolmadı; tekrar dene.");
+          }
+          return false;
+        }
+      };
+
+      const promise = run();
+      savePromiseRef.current = promise;
       try {
-        const res = await fetch(`/api/child/journal/${entryId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            op: "update_body",
-            body: payloadBody,
-            expectedRevision,
-            markSaved: opts?.markSaved ?? true,
-          }),
-        });
-        const data = (await res.json()) as {
-          entry?: ChildEntryView;
-          error?: string;
-        };
-
-        if (seq !== seqRef.current) return false;
-
-        if (res.status === 401) {
-          setSaveState("failed");
-          setError(
-            "Oturumun sona erdi. Kaydedilmeyen metin bu cihazda duruyor; yeniden giriş yapıp kopyalayabilirsin.",
-          );
-          return false;
-        }
-        if (res.status === 409) {
-          setSaveState("conflict");
-          setError(data.error || "Başka bir değişiklik var. Sayfayı yenile.");
-          return false;
-        }
-        if (!res.ok || !data.entry) {
-          setSaveState("failed");
-          setError(data.error || "Kaydedilemedi.");
-          return false;
-        }
-
-        applyEntry(data.entry);
-        setSaveState("saved");
-        return true;
-      } catch {
-        if (seq === seqRef.current) {
-          setSaveState("failed");
-          setError("Bağlantı hatası. Metnin kaybolmadı; tekrar dene.");
-        }
-        return false;
+        return await promise;
+      } finally {
+        if (savePromiseRef.current === promise) savePromiseRef.current = null;
       }
     },
     [applyEntry, entryId],
   );
+
+  const syncBodyFromDom = useCallback(() => {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById("journal-body") as HTMLTextAreaElement | null;
+    if (!el) return;
+    if (el.value === latestRef.current.body) return;
+    latestRef.current = { ...latestRef.current, body: el.value };
+    dirtyRef.current = el.value !== persistedBodyRef.current;
+  }, []);
+
+  useEffect(() => {
+    registerTextGuard({
+      isDirty: () => {
+        syncBodyFromDom();
+        return (
+          latestRef.current.body !== persistedBodyRef.current ||
+          saveStateRef.current === "saving" ||
+          saveStateRef.current === "failed" ||
+          saveStateRef.current === "conflict"
+        );
+      },
+      flush: async () => {
+        syncBodyFromDom();
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        const before = saveStateRef.current as SaveState;
+        if (before === "conflict") return "conflict";
+        if (
+          latestRef.current.body === persistedBodyRef.current &&
+          before !== "failed" &&
+          before !== "saving"
+        ) {
+          return "clean";
+        }
+        if (savePromiseRef.current) {
+          const okInflight = await savePromiseRef.current;
+          if (okInflight) return "saved";
+          const afterInflight = saveStateRef.current as SaveState;
+          if (afterInflight === "conflict") return "conflict";
+          return "failed";
+        }
+        const ok = await save({ markSaved: true });
+        if (ok) return "saved";
+        const afterSave = saveStateRef.current as SaveState;
+        if (afterSave === "conflict") return "conflict";
+        return "failed";
+      },
+      discardLocal: () => {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        seqRef.current += 1;
+        const restored = persistedBodyRef.current;
+        setBody(restored);
+        latestRef.current = { ...latestRef.current, body: restored };
+        setSaveState("saved");
+        saveStateRef.current = "saved";
+        setError(undefined);
+        dirtyRef.current = false;
+      },
+    });
+    return () => registerTextGuard(null);
+  }, [registerTextGuard, save, syncBodyFromDom]);
 
   useEffect(() => {
     if (body === initial.body && revision === initial.revision) return;
@@ -166,7 +273,6 @@ export function JournalEditor({
         ? crypto.randomUUID()
         : `sum_${Date.now()}`;
 
-    // Ensure latest text is saved first
     if (timerRef.current) clearTimeout(timerRef.current);
     const saved = await save({ markSaved: true });
     if (!saved) {
@@ -203,7 +309,6 @@ export function JournalEditor({
         return;
       }
 
-      // Never overwrite newer local edits with a late response body.
       const localChanged =
         latestRef.current.body !== bodyAtRequest ||
         latestRef.current.revision !== revisionAtRequest;
@@ -250,7 +355,9 @@ export function JournalEditor({
         return;
       }
       applyEntry(data.entry);
-      setSummaryMsg("Özet kabul edildi. Paylaşmak için ayrıca ‘Paylaşımı hazırla’ adımına git.");
+      setSummaryMsg(
+        "Özet kabul edildi. Hâlâ özel: paylaşmak için aşağıdan ‘Paylaşımı hazırla’yı kullan.",
+      );
     } catch {
       setSummaryMsg("Bağlantı hatası.");
     } finally {
@@ -285,6 +392,10 @@ export function JournalEditor({
     }
   }
 
+  async function flushThenNavigate(href: string) {
+    await tryNavigate(href);
+  }
+
   const statusLabel =
     saveState === "saving"
       ? "Kaydediliyor…"
@@ -302,194 +413,261 @@ export function JournalEditor({
       ? suggestion
       : null;
 
+  const hasNarrative = Boolean(body.trim());
+  const showLaterSteps = hasNarrative || Boolean(acceptedSummary.trim()) || Boolean(pendingSuggestion);
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 text-sm" style={{ color: "var(--muted)" }}>
-        <span aria-live="polite">{statusLabel}</span>
+    <div className="space-y-6">
+      <div
+        className="flex flex-wrap items-center justify-between gap-2 text-sm"
+        style={{ color: "var(--muted)" }}
+        aria-live="polite"
+      >
+        <span className="font-semibold">{statusLabel}</span>
+        {initial.published ? (
+          <span>Velin şunu görecek · paylaşılıyor</span>
+        ) : (
+          <span>Bende kalacak · özel</span>
+        )}
       </div>
 
-      <label className="block" htmlFor="journal-body">
-        <span className="sr-only">Günlük yazın</span>
-        <textarea
-          id="journal-body"
-          value={body}
-          onChange={(e) => {
-            setBody(e.target.value);
-            setSaveState("idle");
-          }}
-          rows={10}
-          maxLength={8000}
-          className="w-full rounded-2xl border p-4 text-base leading-relaxed"
-          style={{ borderColor: "var(--line)", background: "white", minHeight: 220 }}
-          placeholder="Düşüncelerini buraya yaz…"
-        />
-      </label>
+      <section className="space-y-3" aria-labelledby="stage-write">
+        <div>
+          <h2 id="stage-write" className="text-lg font-semibold">
+            1. Anlat / yaz
+          </h2>
+          <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+            Yazın özel kalır. İstersen yalnızca kaydedip çıkabilirsin.
+          </p>
+        </div>
 
-      {features.transcriptionAvailable ? (
-        <VoiceRecorder
-          entryId={entryId}
-          expectedRevision={revision}
-          onApplied={async (payload, transcript) => {
-            const local = payload as {
-              __applyTranscriptLocally?: boolean;
-              transcript?: string;
-              mode?: "append" | "replace";
-              skipTranscriptRow?: boolean;
-            };
-            if (local.__applyTranscriptLocally && local.transcript) {
-              await applyReviewedTranscript(
-                local.transcript,
-                local.mode || "append",
-                local.skipTranscriptRow === true,
-              );
-              return;
-            }
-            if (payload && typeof payload === "object" && "revision" in (payload as object)) {
-              applyEntry(payload as ChildEntryView);
-            } else {
-              await applyReviewedTranscript(transcript, "append");
-            }
-          }}
-        />
-      ) : (
-        <p className="text-sm" style={{ color: "var(--muted)" }}>
-          Sesle anlatım şu an yapılandırılmamış. Yazarak devam edebilirsin.
-          {getAiFeatureStatusClientHint()}
-        </p>
-      )}
+        <label className="block" htmlFor="journal-body">
+          <span className="sr-only">Günlük yazın</span>
+          <textarea
+            id="journal-body"
+            value={body}
+            onChange={(e) => {
+              const next = e.target.value;
+              setBody(next);
+              latestRef.current = { ...latestRef.current, body: next };
+              dirtyRef.current = next !== persistedBodyRef.current;
+              setSaveState("idle");
+              saveStateRef.current = "idle";
+            }}
+            rows={10}
+            maxLength={8000}
+            className="w-full rounded-2xl border p-4 text-base leading-relaxed"
+            style={{ borderColor: "var(--line)", background: "white", minHeight: 220 }}
+            placeholder="Düşüncelerini buraya yaz…"
+          />
+        </label>
 
-      <div className="space-y-2">
-        {features.summarizationAvailable ? (
-          <button
-            type="button"
-            disabled={summaryBusy || !body.trim()}
-            onClick={() => void requestSummary()}
-            className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold disabled:opacity-50"
-            style={{ background: "var(--accent-soft)", color: "var(--ink)" }}
-          >
-            {summaryBusy ? "Özet hazırlanıyor…" : "Yazımı toparla"}
-          </button>
+        {features.transcriptionAvailable ? (
+          <VoiceRecorder
+            entryId={entryId}
+            expectedRevision={revision}
+            onApplied={async (payload, transcript) => {
+              const local = payload as {
+                __applyTranscriptLocally?: boolean;
+                transcript?: string;
+                mode?: "append" | "replace";
+                skipTranscriptRow?: boolean;
+              };
+              if (local.__applyTranscriptLocally && local.transcript) {
+                await applyReviewedTranscript(
+                  local.transcript,
+                  local.mode || "append",
+                  local.skipTranscriptRow === true,
+                );
+                return;
+              }
+              if (payload && typeof payload === "object" && "revision" in (payload as object)) {
+                applyEntry(payload as ChildEntryView);
+              } else {
+                await applyReviewedTranscript(transcript, "append");
+              }
+            }}
+          />
         ) : (
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            Özet önerisi şu an yapılandırılmamış.
+            Sesle anlatım şu an yapılandırılmamış. Yazarak devam edebilirsin.
+            {getAiFeatureStatusClientHint()}
           </p>
         )}
-        {summaryMsg ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }} role="status">
-            {summaryMsg}
-          </p>
-        ) : null}
-      </div>
 
-      {pendingSuggestion ? (
-        <section
-          className="space-y-3 rounded-2xl border p-4"
-          style={{ borderColor: "var(--line)", background: "rgba(255,255,255,0.7)" }}
+        <button
+          type="button"
+          onClick={() => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            void save({ markSaved: true });
+          }}
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
+          style={{ background: "var(--accent)", color: "white" }}
         >
-          <h3 className="font-semibold">Önerilen özet</h3>
-          {pendingSuggestion.isStale || pendingSuggestion.status === "STALE" ? (
-            <p className="text-sm font-semibold" style={{ color: "var(--warn)" }}>
-              Bu öneri eski metne ait. Kabul etmeden önce yeniden “Yazımı toparla” diyebilirsin.
+          Kaydet (bende kalsın)
+        </button>
+      </section>
+
+      {showLaterSteps ? (
+        <section className="space-y-3" aria-labelledby="stage-review">
+          <div>
+            <h2 id="stage-review" className="text-lg font-semibold">
+              2. Gözden geçir
+            </h2>
+            <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+              İsteğe bağlı. Özet kabul etmek paylaşım demek değildir.
             </p>
-          ) : null}
-          <textarea
-            value={suggestionDraft}
-            onChange={(e) => setSuggestionDraft(e.target.value)}
-            rows={6}
-            maxLength={8000}
-            className="w-full rounded-2xl border p-3 text-base"
-            style={{ borderColor: "var(--line)", background: "white" }}
-            aria-label="Önerilen özet"
-          />
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              disabled={summaryBusy || pendingSuggestion.isStale}
-              onClick={() => void acceptSuggestion()}
-              className="inline-flex min-h-12 items-center justify-center rounded-2xl px-4 font-semibold disabled:opacity-50"
-              style={{ background: "var(--accent)", color: "white" }}
-            >
-              Özeti kabul et
-            </button>
-            <button
-              type="button"
-              disabled={summaryBusy}
-              onClick={() => void discardSuggestion()}
-              className="inline-flex min-h-12 items-center justify-center rounded-2xl px-4 font-semibold"
-              style={{ border: "1px solid var(--line)" }}
-            >
-              Öneriyi sil
-            </button>
-            <button
-              type="button"
-              disabled={summaryBusy}
-              onClick={() => void requestSummary()}
-              className="inline-flex min-h-12 items-center justify-center rounded-2xl px-4 font-semibold"
-              style={{ background: "var(--accent-soft)" }}
-            >
-              Yeniden öner
-            </button>
           </div>
+
+          <div className="space-y-2">
+            {features.summarizationAvailable ? (
+              <button
+                type="button"
+                disabled={summaryBusy || !body.trim()}
+                onClick={() => void requestSummary()}
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold disabled:opacity-50"
+                style={{ background: "var(--accent-soft)", color: "var(--ink)" }}
+              >
+                {summaryBusy ? "Özet hazırlanıyor…" : "Yazımı toparla"}
+              </button>
+            ) : (
+              <p className="text-sm" style={{ color: "var(--muted)" }}>
+                Özet önerisi şu an yapılandırılmamış.
+              </p>
+            )}
+            {summaryMsg ? (
+              <p className="text-sm" style={{ color: "var(--muted)" }} role="status">
+                {summaryMsg}
+              </p>
+            ) : null}
+          </div>
+
+          {pendingSuggestion ? (
+            <div
+              className="space-y-3 rounded-2xl border p-4"
+              style={{ borderColor: "var(--line)", background: "rgba(255,255,255,0.7)" }}
+            >
+              <h3 className="font-semibold">Önerilen özet</h3>
+              {pendingSuggestion.isStale || pendingSuggestion.status === "STALE" ? (
+                <p className="text-sm font-semibold" style={{ color: "var(--warn)" }}>
+                  Bu öneri eski metne ait. Kabul etmeden önce yeniden “Yazımı toparla” diyebilirsin.
+                </p>
+              ) : null}
+              <textarea
+                value={suggestionDraft}
+                onChange={(e) => setSuggestionDraft(e.target.value)}
+                rows={6}
+                maxLength={8000}
+                className="w-full rounded-2xl border p-3 text-base"
+                style={{ borderColor: "var(--line)", background: "white" }}
+                aria-label="Önerilen özet"
+              />
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={summaryBusy || pendingSuggestion.isStale}
+                  onClick={() => void acceptSuggestion()}
+                  className="inline-flex min-h-12 items-center justify-center rounded-2xl px-4 font-semibold disabled:opacity-50"
+                  style={{ background: "var(--accent)", color: "white" }}
+                >
+                  Özeti kabul et
+                </button>
+                <button
+                  type="button"
+                  disabled={summaryBusy}
+                  onClick={() => void discardSuggestion()}
+                  className="inline-flex min-h-12 items-center justify-center rounded-2xl px-4 font-semibold"
+                  style={{ border: "1px solid var(--line)" }}
+                >
+                  Öneriyi sil
+                </button>
+                <button
+                  type="button"
+                  disabled={summaryBusy}
+                  onClick={() => void requestSummary()}
+                  className="inline-flex min-h-12 items-center justify-center rounded-2xl px-4 font-semibold"
+                  style={{ background: "var(--accent-soft)" }}
+                >
+                  Yeniden öner
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {(originalBody.trim() || acceptedSummary.trim()) && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowOriginal((v) => !v)}
+                className="min-h-11 text-sm font-semibold underline"
+              >
+                {showOriginal ? "Orijinali gizle" : "Orijinal yazımı göster"}
+              </button>
+              {showOriginal ? (
+                <p
+                  className="whitespace-pre-wrap rounded-2xl border p-3 text-sm"
+                  style={{ borderColor: "var(--line)", color: "var(--muted)" }}
+                >
+                  {originalBody.trim() || "(Orijinal metin yok)"}
+                </p>
+              ) : null}
+            </div>
+          )}
         </section>
       ) : null}
 
-      {(originalBody.trim() || acceptedSummary.trim()) && (
-        <div className="space-y-2">
+      {showLaterSteps ? (
+        <section className="space-y-3" aria-labelledby="stage-share">
+          <div>
+            <h2 id="stage-share" className="text-lg font-semibold">
+              3. İstersen paylaş veya planına ekle
+            </h2>
+            <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+              Zorunlu değil. Paylaşım açık onay ister; planına eklediklerini velin de görebilir.
+            </p>
+          </div>
+
           <button
             type="button"
-            onClick={() => setShowOriginal((v) => !v)}
-            className="text-sm font-semibold underline"
+            onClick={() => void flushThenNavigate(`/cocuk/gunluk/${entryId}/paylas`)}
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
+            style={{ background: "var(--accent-soft)", color: "var(--ink)" }}
           >
-            {showOriginal ? "Orijinali gizle" : "Orijinal yazımı göster"}
+            Paylaşımı hazırla
           </button>
-          {showOriginal ? (
-            <p
-              className="whitespace-pre-wrap rounded-2xl border p-3 text-sm"
-              style={{ borderColor: "var(--line)", color: "var(--muted)" }}
-            >
-              {originalBody.trim() || "(Orijinal metin yok)"}
-            </p>
-          ) : null}
-        </div>
-      )}
 
-      {error ? (
-        <p className="text-sm" style={{ color: "var(--danger)" }} role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <button
-        type="button"
-        onClick={() => {
-          if (timerRef.current) clearTimeout(timerRef.current);
-          void save({ markSaved: true });
-        }}
-        className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
-        style={{ background: "var(--accent-soft)", color: "var(--ink)" }}
-      >
-        Kaydet (bende kalsın)
-      </button>
-
-      {body.trim() ? (
-        <div className="space-y-2">
           {features.planExtractAvailable ? (
-            <Link
-              href={`/cocuk/gunluk/${entryId}/plan-oneri`}
-              onClick={() => {
-                if (timerRef.current) clearTimeout(timerRef.current);
-                void save({ markSaved: true });
-              }}
+            <button
+              type="button"
+              onClick={() => void flushThenNavigate(`/cocuk/gunluk/${entryId}/plan-oneri`)}
               className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
               style={{ border: "1px solid var(--line)", color: "var(--ink)" }}
             >
               Planıma neler ekleyebilirim?
-            </Link>
+            </button>
           ) : (
             <p className="text-sm" style={{ color: "var(--muted)" }}>
               Plan önerisi şu an yapılandırılmamış. Planını elle ekleyebilirsin.
             </p>
           )}
+        </section>
+      ) : null}
+
+      {error ? (
+        <div className="space-y-2" role="alert">
+          <p className="text-sm" style={{ color: "var(--danger)" }}>
+            {error}
+          </p>
+          {saveState === "failed" ? (
+            <button
+              type="button"
+              onClick={() => void save({ markSaved: true })}
+              className="inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
+              style={{ border: "1px solid var(--line)" }}
+            >
+              Tekrar kaydet
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

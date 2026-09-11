@@ -27,7 +27,11 @@ export default async function ChildWeekPage({
   const week = await getWeekPlanForChild(session.user.id, params.weekStart);
 
   return (
-    <Shell title="Haftam" subtitle="Ödevler, sınavlar ve çalışma adımların.">
+    <Shell
+      title="Planım"
+      subtitle="Ödevler, sınavlar ve çalışma adımların. Hafta ve Pano aynı kayıtları gösterir."
+      withChildNav
+    >
       <div className="space-y-4">
         <PlanParentNotice />
         <Link href="/cocuk/plan/yeni" className="block">
@@ -41,12 +45,6 @@ export default async function ChildWeekPage({
             <WeekPlanView week={week} initialSelectedDate={params.gun || week.today} />
           )}
         </Panel>
-        <Link
-          href="/cocuk/ana"
-          className="inline-flex min-h-12 items-center text-sm font-semibold underline"
-        >
-          Ana sayfaya dön
-        </Link>
       </div>
     </Shell>
   );

@@ -120,14 +120,19 @@ export function ParentSharedSections({
       allForGuidance.push(s);
     }
   }
+  const hasAnyShare = messages.length > 0 || supportRequests.length > 0;
 
   return (
     <>
       <Panel>
         <h2 className="text-lg font-semibold">Benimle paylaştıkları</h2>
-        {messages.length === 0 ? (
+        {!hasAnyShare ? (
           <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            Henüz seninle paylaşılmış bir mesaj yok. Çocuk paylaşana kadar burada bir şey görünmez.
+            Henüz seninle paylaşılmış bir içerik yok. Çocuk paylaşana kadar burada bir şey görünmez.
+          </p>
+        ) : messages.length === 0 ? (
+          <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+            Metin mesajı yok; aşağıdaki destek isteklerine bak.
           </p>
         ) : (
           <div className="mt-3 space-y-3">
@@ -159,7 +164,7 @@ export function ParentSharedSections({
         <section className="mt-5 space-y-2">
           <h3 className="text-base font-semibold">Yaklaşım önerileri</h3>
           <p className="text-xs font-semibold" style={{ color: "var(--muted)" }}>
-            AI önerisi · Paylaşılanlara dayanır
+            AI önerisi · Paylaşılanlara dayanır · Çocuğun kendi sözü değildir
           </p>
           <GuidanceTeaser items={allForGuidance} />
         </section>

@@ -19,6 +19,7 @@ export default async function ChildRemindersPage() {
     <Shell
       title="Hatırlatmalar"
       subtitle="İsteğe bağlı günlük yazma daveti ve çalışma adımı hatırlatmaları."
+      withChildNav
     >
       <div className="space-y-4">
         <Panel>
@@ -29,8 +30,8 @@ export default async function ChildRemindersPage() {
             pushConfigured={getPushAdapter().isConfigured()}
           />
         </Panel>
-        <Link href="/cocuk/ana" className="inline-flex min-h-12 items-center font-semibold underline">
-          Ana sayfaya dön
+        <Link href="/cocuk/ayarlar" className="inline-flex min-h-12 items-center font-semibold underline">
+          Ayarlara dön
         </Link>
       </div>
     </Shell>

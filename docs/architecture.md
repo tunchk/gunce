@@ -189,6 +189,25 @@ Routes / commands:
 
 Migration: `20260911100000_reminders_web_push`.
 
+## Daily experience UI (Milestone 8)
+
+Presentation layer only:
+
+- `ChildNav` fixed bottom bar on completed child routes (`Shell` `withChildNav` + `pb-28`)
+- Child settings at `/cocuk/ayarlar` (reminders + sign-out); home hierarchy simplified
+- Journal editor staged sections; list sharing labels distinguish private vs published
+- Parent home prioritizes `ParentSharedSections` before compact plan/goals
+
+No schema or domain service rewrite.
+
+## Safe journal navigation (Milestone 8.1)
+
+- `NavigationGuardProvider` + `GuardedLink` (`onClick` / `onNavigate`) intercept soft navigation while a journal text or voice guard is registered
+- Text flush uses last successful persist + DOM sync; never reports success on failed/conflict writes; conflict offers stay/reload only (no force overwrite)
+- Voice guard blocks on recording / between / finishing / review / recoverable in-memory audio; discard clears tracks, queues, and generation token so late STT cannot apply
+- Tab close: `beforeunload` only (no reliable async save during unload)
+- Browser Back: pushState sentinel + leave dialog/pipeline; not a substitute for a first-party App Router blocker API
+
 ## Authorization rules
 
 1. Resolve session from httpOnly cookie via Better Auth.
