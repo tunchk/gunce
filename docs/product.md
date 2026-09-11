@@ -52,19 +52,79 @@ Children describe their day by voice or text, edit the resulting summary, manage
 - Accepting a summary does not share with the parent; child may copy accepted summary into the sharing draft, then publish with the existing confirmation
 - Failures leave private journaling usable; typed input remains available when voice/AI is unconfigured
 
-**Out of scope for Milestone 3 (future):** weekly planning, tasks, goals, notifications, emotional scoring, general-purpose chatbot, full email verification / password recovery.
+**Out of scope for Milestone 3 (future):** goals, notifications, emotional scoring, general-purpose chatbot, full email verification / password recovery.
 
-## Milestone 4 — Weekly planning (planned)
+## Milestone 4 — Weekly planning (current)
 
-- “Haftama bak” and “Sıradaki adımım”
-- Child-managed weekly plans
-- Parent visibility of plan items the child adds (per product rules)
+- Child-owned weekly plan: homework, exams, courses/activities, and study/preparation steps
+- Distinguish commitments (due/event dates) from study steps (planned date + optional estimated minutes)
+- Study steps may link to homework/exam or stand alone; moving a step never changes the related deadline
+- Completing preparation does not complete homework/exam; passing event dates do not auto-complete
+- Child home: functional **Sıradaki adımım** (today’s next incomplete study step) and **Haftama bak**
+- **Haftam**: Monday–Sunday, week navigation, mobile day selector, unscheduled + missed steps
+- **Plan ekle**: type first, then relevant fields; optional prep after homework/exam
+- Parent: concise **Haftanın planı** + read-only week view; APIs reject parent writes
+- Planning visibility is separate from journal sharing; parent plan APIs never include journal text/transcripts/summaries
+- First-use notice: “Planına eklediğin işleri velin de görebilir.”
 
-## Milestone 5 — Goals and parent support (planned)
+### Milestone 4.1 — Study-step board (current)
 
-- Longer-term learning goals
-- Richer parent support views based on permitted shared data
-- Notifications (opt-in, age-appropriate)
+- Same `PlanStudyStep` records as the week view (no parallel task system)
+- View selector: **Hafta** / **Pano**; week navigation preserved across views
+- Board columns: **Yapılacak** / **Yapıyorum** / **Tamamladım** (desktop side-by-side; mobile tabs)
+- Study-step workflow status: `TODO` | `IN_PROGRESS` | `DONE` (single source of truth; migrated from former completion boolean)
+- Optional `completedAt` on study steps is metadata only (set when entering DONE; cleared when leaving; not used to decide columns)
+- Commitments stay separate; unscheduled + previous-day leftovers remain accessible
+- Next-step on home prefers today’s **Yapıyorum**, then **Yapılacak**
+- Parent read-only plan shows Turkish status labels; no parent writes
+
+**Known data limitation:** After `20260910190000_study_step_status` dropped study-step completion timestamps, re-adding `completedAt` (`20260910200000_study_step_completed_at_metadata`) leaves existing DONE rows with `completedAt = null`. New completions record server time going forward.
+
+**Out of scope for Milestone 4 / 4.1:** AI task extraction, automatic scheduling, recurring schedules, push notifications, smartwatch integration, drag-and-drop, workload health claims.
+
+## Milestone 5 — Long-term goals
+
+- Child-owned goals with title, optional outcome description, optional target date
+- Lifecycle: **ACTIVE** / **ACHIEVED** / **ARCHIVED** (independent of study-step workflow)
+- Linked study steps are the same `PlanStudyStep` records used by Hafta and Pano (optional `relatedGoalId`)
+- Progress = DONE linked steps / total linked steps (never fake 100% with zero steps; not mastery)
+- Completing all steps does **not** auto-achieve the goal; child chooses **Hedefime ulaştım**
+- Archive/delete preserve steps; delete only removes the goal link
+- Child UI: **Hedeflerim**; first-use notice that parents can see goals and their steps
+- Parent: read-only list/detail; write APIs rejected; no journal content in goal payloads
+
+**Out of scope for Milestone 5:** AI goal generation, recurrence, notifications, smartwatch, mastery scoring.
+
+## Milestone 6 — Journal → plan suggestions
+
+- Optional **Planıma neler ekleyebilirim?** on the journal entry (after save)
+- Uses the saved, child-reviewed narrative (not unreviewed audio; not the AI summary as a substitute)
+- AI returns grounded **candidates** only (homework / exam / course / study step) with supporting excerpts validated against the source
+- **Explicit study/preparation intent** (e.g. “çalışmam lazım”) must yield a separate `STUDY_STEP` candidate — not only the related exam/homework
+- Deadline uncertainty (“teslim tarihini bilmiyorum”) keeps the homework candidate with uncertain date; it does not drop the obligation
+- Child reviews editable cards (initially unselected), confirms dates, then **Seçtiklerimi planıma ekle**
+- Notice: “Planına eklediklerini velin de görebilir. Günlük yazın paylaşılmaz.”
+- Application creates the same `PlanCommitment` / `PlanStudyStep` records; generation never mutates the plan
+- Batches tied to source revision; edits stale unapplied suggestions; entry delete cascades private batches/excerpts
+- Already applied plan items remain independent of later journal/share edits
+- Parents never see candidate batches, excerpts, or provenance; plan APIs stay approved fields only
+
+**Provider note (Milestone 6.1 correction):** An earlier live acceptance run returned exam + homework but omitted the explicit preparation sentence as a `STUDY_STEP`. Investigation showed the **model omitted it** (structured schema already allowed `STUDY_STEP`; sanitization did not drop a prep candidate that was never returned). Prompts and schema descriptions were tightened so explicit study/prep intent yields a separate `STUDY_STEP`. Sanitization also grounds candidate types in excerpt wording (filters invented prep on exam-only lines and invented homework on study-only lines — not keyword task generation). After correction, a bounded live eval (`LIVE_PLAN_EXTRACT=1`) matched expected types for the acceptance example and the six contrasting fixtures. Stub tests still do not substitute for live provider checks.
+
+**Out of scope for Milestone 6:** automatic scheduling, recurrence, notifications, smartwatch, automatic goal creation.
+
+## Milestone 7 — Child reminders + Web Push (current)
+
+- Optional **Hatırlatmalar** settings (off by default): daily journal invitation time, global study-step reminders, quiet hours (default 21:00–08:00)
+- Browser permission only after **Bu cihazda bildirimleri aç**; distinguishes app prefs / permission / device registration
+- Daily journal copy: “Gününden bir şey anlatmak ister misin?” — at most once per child-local day; skipped if a non-empty saved narrative exists (sharing not required; no journal content in the decision path or push payload)
+- Study-step reminders: optional `reminderLocalTime` + `plannedDate`; not estimatedMinutes; DONE/IN_PROGRESS suppressed; delete/reschedule updates occurrences; title edit does not duplicate
+- Durable PostgreSQL outbox (`ReminderOccurrence` + per-device `ReminderDelivery`); process via `npm run reminders:process` or authenticated `POST /api/internal/reminders/process`
+- Web Push (VAPID); generic lock-screen text only; click opens child routes requiring a valid session
+- Policies: quiet-hours defer/skip, 30-minute grace (no backlog), daily cap of 3, DST gap/overlap rules, child time zone
+- iOS: Home Screen install guidance when relevant; localhost does not prove real-phone/closed-app delivery
+
+**Out of scope for Milestone 7:** parent notifications, email/SMS, recurring study tasks, smartwatch, automatic exam/goal notifications.
 
 ## Design principles
 

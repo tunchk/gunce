@@ -1,13 +1,16 @@
 import { createOpenAIParentGuidanceProvider } from "@/lib/ai/openai-parent-guidance";
+import { createOpenAIPlanExtractProvider } from "@/lib/ai/openai-plan-extract";
 import { createOpenAISummarizationProvider } from "@/lib/ai/openai-summarization";
 import { createOpenAITranscriptionProvider } from "@/lib/ai/openai-transcription";
 import {
   createTestParentGuidanceProvider,
+  createTestPlanExtractProvider,
   createTestSummarizationProvider,
   createTestTranscriptionProvider,
 } from "@/lib/ai/test-providers";
 import type {
   ParentGuidanceProvider,
+  PlanExtractProvider,
   SummarizationProvider,
   TranscriptionProvider,
 } from "@/lib/ai/types";
@@ -15,6 +18,7 @@ import type {
 let transcriptionOverride: TranscriptionProvider | null = null;
 let summarizationOverride: SummarizationProvider | null = null;
 let parentGuidanceOverride: ParentGuidanceProvider | null = null;
+let planExtractOverride: PlanExtractProvider | null = null;
 
 function isAiTestModeEnabled() {
   if (process.env.GUNCE_AI_TEST_MODE !== "1") return false;
@@ -38,6 +42,10 @@ export function setParentGuidanceProviderForTests(provider: ParentGuidanceProvid
   parentGuidanceOverride = provider;
 }
 
+export function setPlanExtractProviderForTests(provider: PlanExtractProvider | null) {
+  planExtractOverride = provider;
+}
+
 export function getTranscriptionProvider(): TranscriptionProvider {
   if (transcriptionOverride) return transcriptionOverride;
   if (isAiTestModeEnabled()) return createTestTranscriptionProvider();
@@ -56,16 +64,25 @@ export function getParentGuidanceProvider(): ParentGuidanceProvider {
   return createOpenAIParentGuidanceProvider();
 }
 
+export function getPlanExtractProvider(): PlanExtractProvider {
+  if (planExtractOverride) return planExtractOverride;
+  if (isAiTestModeEnabled()) return createTestPlanExtractProvider();
+  return createOpenAIPlanExtractProvider();
+}
+
 export function getAiFeatureStatus() {
   const transcription = getTranscriptionProvider();
   const summarization = getSummarizationProvider();
   const parentGuidance = getParentGuidanceProvider();
+  const planExtract = getPlanExtractProvider();
   return {
     transcriptionAvailable: transcription.isConfigured(),
     summarizationAvailable: summarization.isConfigured(),
     parentGuidanceAvailable: parentGuidance.isConfigured(),
+    planExtractAvailable: planExtract.isConfigured(),
     transcriptionProvider: transcription.name,
     summarizationProvider: summarization.name,
     parentGuidanceProvider: parentGuidance.name,
+    planExtractProvider: planExtract.name,
   };
 }

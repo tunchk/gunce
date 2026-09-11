@@ -314,6 +314,8 @@ export async function updateJournalBody(input: {
     },
     data: { status: "STALE" },
   });
+  const { markPlanExtractBatchesStaleForEntry } = await import("@/lib/plan-extract");
+  await markPlanExtractBatchesStaleForEntry(entry.id);
 
   const fresh = await prisma.journalEntry.findUniqueOrThrow({
     where: { id: entry.id },
@@ -653,6 +655,9 @@ export async function applyTranscriptToEntry(input: {
     });
   });
 
+  const { markPlanExtractBatchesStaleForEntry } = await import("@/lib/plan-extract");
+  await markPlanExtractBatchesStaleForEntry(entry.id);
+
   const fresh = await prisma.journalEntry.findUniqueOrThrow({
     where: { id: entry.id },
     include: entryInclude,
@@ -799,6 +804,9 @@ export async function acceptSummarySuggestion(input: {
       data: { status: "STALE" },
     });
   });
+
+  const { markPlanExtractBatchesStaleForEntry } = await import("@/lib/plan-extract");
+  await markPlanExtractBatchesStaleForEntry(entry.id);
 
   const fresh = await prisma.journalEntry.findUniqueOrThrow({
     where: { id: entry.id },

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChildEntryView } from "@/lib/journal";
 import { getAiFeatureStatusClientHint } from "@/lib/ai/client-status";
@@ -14,7 +15,11 @@ export function JournalEditor({
 }: {
   entryId: string;
   initial: ChildEntryView;
-  features: { transcriptionAvailable: boolean; summarizationAvailable: boolean };
+  features: {
+    transcriptionAvailable: boolean;
+    summarizationAvailable: boolean;
+    planExtractAvailable: boolean;
+  };
 }) {
   const [body, setBody] = useState(initial.body);
   const [revision, setRevision] = useState(initial.revision);
@@ -465,6 +470,28 @@ export function JournalEditor({
       >
         Kaydet (bende kalsın)
       </button>
+
+      {body.trim() ? (
+        <div className="space-y-2">
+          {features.planExtractAvailable ? (
+            <Link
+              href={`/cocuk/gunluk/${entryId}/plan-oneri`}
+              onClick={() => {
+                if (timerRef.current) clearTimeout(timerRef.current);
+                void save({ markSaved: true });
+              }}
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
+              style={{ border: "1px solid var(--line)", color: "var(--ink)" }}
+            >
+              Planıma neler ekleyebilirim?
+            </Link>
+          ) : (
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              Plan önerisi şu an yapılandırılmamış. Planını elle ekleyebilirsin.
+            </p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

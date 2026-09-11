@@ -4,7 +4,11 @@ Uygulama çocuklar (9–14) ve velileri için: gününü anlat, haftanı birlikt
 
 **Kilometre taşı 1:** hesaplar, yetkilendirme, onboarding, eşleştirme.  
 **Kilometre taşı 2:** metin günlüğü ve çocuğun kontrolünde veli paylaşımı.  
-**Kilometre taşı 3:** sesle anlatım (yazıya çevirme) ve çocuğun gözden geçirdiği yapay zekâ özeti.
+**Kilometre taşı 3:** sesle anlatım (yazıya çevirme) ve çocuğun gözden geçirdiği yapay zekâ özeti.  
+**Kilometre taşı 4:** çocuğun yönettiği haftalık plan ve pano; velinin salt okunur görünümü.  
+**Kilometre taşı 5:** uzun vadeli hedefler; aynı çalışma adımlarıyla bağlantı; veli salt okunur.  
+**Kilometre taşı 6:** günlükten plan önerileri; çocuk seçer ve mevcut plana ekler.  
+**Kilometre taşı 7:** isteğe bağlı hatırlatmalar; sunucu zamanlaması ve Web Push.
 
 Ürün: [`docs/product.md`](docs/product.md) · Mimari: [`docs/architecture.md`](docs/architecture.md)
 
@@ -25,11 +29,17 @@ cp .env.example .env
 | `BETTER_AUTH_SECRET` | Uzun rastgele gizli anahtar (`openssl rand -base64 32`) |
 | `BETTER_AUTH_URL` | Uygulama kök URL’si (`http://localhost:3000`) |
 | `NEXT_PUBLIC_APP_URL` | İstemci tabanlı URL (`http://localhost:3000`) |
-| `OPENAI_API_KEY` | (İsteğe bağlı) Ses yazıya çevirme ve özet; yoksa günlük yazma çalışır, ses/özet “kullanılamıyor” olur |
+| `OPENAI_API_KEY` | (İsteğe bağlı) Ses yazıya çevirme, özet ve plan önerisi; yoksa günlük/plan elle çalışır |
 | `OPENAI_TRANSCRIBE_MODEL` | Varsayılan: `gpt-transcribe` |
 | `OPENAI_SUMMARY_MODEL` | Varsayılan: `gpt-4o-mini` |
+| `OPENAI_PLAN_EXTRACT_MODEL` | Varsayılan: `OPENAI_SUMMARY_MODEL` veya `gpt-4o-mini` |
 | `GUNCE_AI_TEST_MODE` | Yalnızca otomatik testler; gerçek uygulamada / üretimde kullanma |
 | `GUNCE_ALLOW_AI_TEST_STUBS` | `NODE_ENV=production` iken stub için ek anahtar (yalnızca Playwright); üretim host’una koyma |
+| `LIVE_PLAN_EXTRACT` | `1` iken canlı plan-çıkarım kalite testi; CI’da varsayılan kapalı |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Web Push VAPID genel anahtar |
+| `VAPID_PRIVATE_KEY` | Web Push VAPID özel anahtar (yalnızca sunucu) |
+| `VAPID_SUBJECT` | `mailto:` veya site URL (VAPID subject) |
+| `REMINDER_SCHEDULER_SECRET` | Dahili zamanlayıcı endpoint sırrı |
 
 Testler yalnızca `gunce_test` kullanır.
 
@@ -66,14 +76,32 @@ npx prisma migrate deploy
 npm run dev
 ```
 
-Ses/özet migrasyonu: `20260909180000_voice_summary`.
+Ses/özet migrasyonu: `20260909180000_voice_summary`.  
+Haftalık plan migrasyonu: `20260910180000_weekly_planning`.  
+Çalışma adımı durumu (pano): `20260910190000_study_step_status`.  
+Tamamlanma zaman damgası (metadata): `20260910200000_study_step_completed_at_metadata`.  
+Uzun vadeli hedefler: `20260910210000_plan_goals`.  
+Günlükten plan önerileri: `20260910220000_plan_extract`.  
+Hatırlatmalar / Web Push: `20260911100000_reminders_web_push`.
 
 ```bash
 npm run typecheck
 npm run build
 npm test
-npm run build && npm run test:e2e   # Playwright; Chromium gerekir; GUNCE_AI_TEST_MODE stub’ları kullanır
+npm run reminders:process          # yerel zamanlayıcı (VAPID + DB gerekir)
+npm run build && npm run test:e2e  # Playwright; Chromium gerekir
 ```
+
+### Hatırlatmalar (Milestone 7)
+
+1. VAPID üret: `npx web-push generate-vapid-keys` → `.env` içine yaz (gerçek anahtarları repoya koyma).
+2. `REMINDER_SCHEDULER_SECRET` ayarla (en az 16 karakter).
+3. Çocuk: **Hatırlatmalar** → tercihleri aç → **Bu cihazda bildirimleri aç** (HTTPS veya localhost).
+4. **Deneme bildirimi gönder** (kabul ≠ ekranda görünme garantisi).
+5. Yerel işleyici: `npm run reminders:process` veya harici cron → `POST /api/internal/reminders/process` + Bearer secret.
+6. Gelecek barındırma: periyodik scheduler (1–5 dk), HTTPS, VAPID, secret; hosting bu kilometre taşında provision edilmez.
+
+**Manuel gerçek cihaz (HTTPS) kontrol listesi:** aç → deneme bildirimi → uygulamayı kapat → zamanlanmış hatırlatmayı tetikle → adımı tamamla/ertele → eski hatırlatmanın gelmediğini doğrula → oturumu iptal et → yeni gönderim olmasın. Localhost bunu kanıtlamaz.
 
 ## Manuel deneme (ayrı oturumlar)
 
@@ -83,6 +111,10 @@ npm run build && npm run test:e2e   # Playwright; Chromium gerekir; GUNCE_AI_TES
 4. İstersen **Paylaşımı hazırla** → **Özetimden kopyala** → önizle → **Paylaş** (otomatik paylaşılmaz).
 5. Veli ana ekranında yalnızca yayınlanan anlık görüntüyü gör; özel metin / transkript / öneri görünmez.
 6. **Paylaşımı geri çek** → velinin uygulamada görmesi durur; daha önce okunan bilgi geri alınamaz.
+7. Çocuk: **Plan ekle** → örn. Cuma “Almanca kelime sınavı” → Çarşamba/Perşembe hazırlık adımları → **Tamamladım** / **Başka güne taşı**. Sınav tarihi değişmez.
+8. **Haftam** içinde **Hafta** / **Pano** görünümleri; panoda **Başla** → **Tamamladım**. Aynı adımlar her iki görünümde.
+9. Veli: **Haftanın planı** salt okunur (durum etiketleriyle); planı düzenleyemez. Plan API’leri günlük metni taşımaz.
+10. Çocuk: **Hedeflerim** → hedef + adımlar; panoda tamamla → ilerleme güncellenir. Veli **Hedefler** salt okunur.
 
 ### Mikrofon (manuel kontrol listesi)
 
@@ -101,9 +133,10 @@ Ses ve metin, yapılandırılmış OpenAI uç noktalarına gönderilir. Uygulama
 
 ## Bilinen sınırlamalar
 
-- Haftalık plan, hedefler, bildirimler, duygu skoru, genel sohbet botu **yok**.
+- Uzun vadeli hedefler, bildirimler, tekrarlayan programlar, yapay zekâ ile otomatik görev çıkarma **yok**.
 - E-posta doğrulama ve şifre sıfırlama **yok**.
 - Canlı OpenAI çağrıları anahtar olmadan doğrulanmaz; testler deterministik stub kullanır.
 - Çok bölümlü seste işlenmemiş ses yalnızca bellektemedir; yenileme / sekme kapatma / çökmede kaybolur.
 - Anlatım oturumu en fazla 12 bölüm (bölüm başı ~120 sn); görünmez arka plan dilimleme yok.
+- Plan tahmini dakikaları planlanan çabadır; ölçülen çalışma süresi veya ustalık çıkarımı yok.
 - Rate limit uygulama/DB düzeyinde; üretimde ek kenar koruması önerilir.

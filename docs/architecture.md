@@ -81,13 +81,121 @@ Guards:
 - Parent APIs never receive transcripts, suggestions, `originalBody`, or private `body`
 - Do not log journal content, audio, provider request bodies, or sensitive provider responses
 
+## Weekly planning model (Milestone 4)
+
+| Concept | Model | Notes |
+|---------|-------|-------|
+| Commitment | `PlanCommitment` | `HOMEWORK` / `EXAM` / `COURSE`; homework `dueDate` (nullable = tarih belli değil); exam/course `eventDate` (+ optional `eventTimeLocal` as child-local `HH:mm`) |
+| Study step | `PlanStudyStep` | Optional `plannedDate`, optional `estimatedMinutes` (planned effort only), optional `relatedCommitmentId`; workflow `status`: `TODO` / `IN_PROGRESS` / `DONE` (authoritative); optional `completedAt` metadata when entering DONE |
+| Concurrency | `revision` / `expectedRevision` | Same conflict pattern as journal |
+| Idempotent create | `clientRequestId` | Unique; duplicate POSTs return the existing row |
+
+Date and workflow:
+
+- Calendar dates stored as PostgreSQL `DATE` / Prisma `@db.Date` (UTC midnight of `YYYY-MM-DD`).
+- “Today” and week boundaries use the child’s `ChildProfile.timeZone`.
+- Weeks are Monday–Sunday. Rescheduling a study step updates only `plannedDate` (status and `completedAt` unchanged).
+- Status mutations use explicit desired state (`set_status`); retry-safe; never flip on repeat.
+- Entering `DONE` sets `completedAt` to server time; repeating `DONE` keeps the existing timestamp; leaving `DONE` clears it.
+- Completing a step does not complete linked commitments. Commitment `completedAt` is unchanged.
+- Migration `20260910190000_study_step_status`: former boolean completion → `status`, then dropped study-step `completedAt`.
+- Migration `20260910200000_study_step_completed_at_metadata`: restores optional `completedAt` as metadata only. Rows already `DONE` before this migration keep `completedAt` null (historical timestamps were not recoverable; do not invent migration-time dates).
+
+Board (Milestone 4.1):
+
+- Child UI: `/cocuk/haftam?view=hafta|pano` — same week payload; board columns filter by `status`.
+- Unscheduled open steps and missed (prior days, not DONE) stay in compact sections.
+- Parent week view shows Turkish status labels; write APIs remain 403.
+
+Routes:
+
+- Child: `GET/POST /api/child/plan`, `GET/PATCH/DELETE /api/child/plan/commitment/[id]`, `GET/PATCH/DELETE /api/child/plan/step/[id]` (`op: set_status`)
+- Parent: `GET /api/parent/plan` (read-only); `POST/PATCH/PUT/DELETE` → 403
+- UI: `/cocuk/haftam`, `/cocuk/plan/yeni`, `/cocuk/plan/is/[id]`, `/cocuk/plan/adim/[id]`, `/veli/plan`
+
+Parent plan payloads contain only plan fields for family children — never journal bodies, transcripts, suggestions, or share drafts.
+
+## Long-term goals (Milestone 5)
+
+| Concept | Model | Notes |
+|---------|-------|-------|
+| Goal | `PlanGoal` | Title, optional `description`, optional `targetDate` (`@db.Date`), `status` ACTIVE/ACHIEVED/ARCHIVED, `revision`, optional `clientRequestId` |
+| Link | `PlanStudyStep.relatedGoalId` | At most one goal per step; may also link to a homework/exam commitment; same child only |
+| Progress | Derived | `DONE` count / linked step count; label like `1 / 2 adım tamamlandı`; null ratio when zero steps |
+
+Behavior:
+
+- Creating/attaching steps does not copy rows; week and board show the same `PlanStudyStep` ids.
+- Goal lifecycle does not auto-change when steps complete or reopen; achieving is explicit.
+- Archiving does not unschedule or complete steps. Deleting a goal sets `relatedGoalId` to null (steps kept).
+- Attaching a step already linked to another goal requires `allowMove: true` (no silent reassignment).
+
+Routes:
+
+- Child: `GET/POST /api/child/goals`, `GET/PATCH/DELETE /api/child/goals/[id]`
+- Parent: `GET /api/parent/goals` (read-only); writes → 403
+- UI: `/cocuk/hedefler`, `/cocuk/hedefler/yeni`, `/cocuk/hedefler/[id]`, `/veli/hedefler`
+
+Migration: `20260910210000_plan_goals`.
+
+## Journal → plan extraction (Milestone 6)
+
+| Concept | Model | Notes |
+|---------|-------|-------|
+| Suggestion batch | `PlanExtractBatch` | Tied to `entryId` + `sourceRevision`; `requestId` idempotent; status READY / STALE / APPLIED; optional `applyRequestId` |
+| Candidate | `PlanExtractCandidate` | HOMEWORK / EXAM / COURSE / STUDY_STEP; `mentionKind` EXPLICIT / PREPARATION; `sourceExcerpt` (private); date phrase + proposed date + uncertainty; optional link ordinal; apply status PENDING / APPLIED / SKIPPED |
+| Plan writes | Existing | Apply uses `createCommitment` / `createStudyStep` with per-candidate `clientRequestId` |
+
+Behavior:
+
+- Source text prefers `originalBody` when an accepted AI summary replaced `body`.
+- Relative dates resolve against the journal `diaryDate` and child time zone; uncertain phrases stay uncertain; past dates are not rolled forward.
+- Excerpt must occur in the source text or the candidate is dropped (`sanitizePlanExtractDrafts`).
+- Explicit study/preparation intent must be a separate `STUDY_STEP` (prompt + schema descriptions). Deadline uncertainty does not remove a homework obligation.
+- Generation does not create plan rows. Apply is atomic per confirmation, retry-safe, and can skip or separately add likely duplicates (no silent merge).
+- Body / transcript / accept-summary edits mark READY batches STALE. Entry delete cascades batches (and private excerpts). Approved plan rows are not deleted.
+- Parent plan APIs never include extract batches, excerpts, or journal text.
+- Deterministic tests cover sanitization/persistence; live provider quality is optional (`LIVE_PLAN_EXTRACT=1`) and separate from mocked integration tests.
+
+**Correction (M6.1):** Live acceptance previously omitted `STUDY_STEP` for an explicit “çalışmam lazım” line — cause was **model omission**, not schema exclusion or excerpt rejection. Prompt/schema guidance updated; `sanitizePlanExtractDrafts` grounds `STUDY_STEP` / commitment types in excerpt wording (drops invented prep/homework when the excerpt does not support that type). Bounded live re-eval after the fix matched acceptance + contrasting fixtures. Do not treat the test stub as proof of live extraction quality.
+
+Routes:
+
+- Child: `GET/POST /api/child/journal/[id]/plan-extract`, `POST .../plan-extract/apply`
+- UI: `/cocuk/gunluk/[id]/plan-oneri`
+- Provider: `PlanExtractProvider` (OpenAI structured output; test stub when `GUNCE_AI_TEST_MODE` allows)
+
+Migration: `20260910220000_plan_extract`.
+
+## Child reminders + Web Push (Milestone 7)
+
+| Concept | Model / piece | Notes |
+|---------|---------------|-------|
+| Prefs | `ChildReminderPreferences` | Off by default; journal time + study toggle + quiet hours; `revision` |
+| Step reminder | `PlanStudyStep.reminderLocalTime` | Optional `HH:mm`; requires `plannedDate` |
+| Device | `ChildPushSubscription` | Bound to child + session; endpoint unique; revoked on sign-out / parent revoke / push 410 |
+| Outbox | `ReminderOccurrence` | Stable `occurrenceKey`; PENDING→CLAIMED→SENT/SKIPPED/EXPIRED/CANCELLED/FAILED; claim lease |
+| Delivery | `ReminderDelivery` | Unique per occurrence+subscription (no routine duplicate device send) |
+| Cap | `ReminderDayBucket` | Per child-local day sent count (max 3) |
+
+Scheduler: `processDueReminders()` — materialize journal rows, claim due work, recheck prefs/status/journal existence, enforce grace + cap, send via injectable `PushAdapter`. Simultaneous study reminders share the stable tag `gunce-study-reminder` so the OS coalesces display; each accepted send still counts toward the daily cap.
+
+Routes / commands:
+
+- Child: `GET/PATCH /api/child/reminders`, `POST/PUT /api/child/reminders/push`
+- Internal: `POST /api/internal/reminders/process` (`REMINDER_SCHEDULER_SECRET`)
+- CLI: `npm run reminders:process`
+- UI: `/cocuk/hatirlatmalar`; SW `/sw.js`; manifest `/manifest.webmanifest`
+
+Migration: `20260911100000_reminders_web_push`.
+
 ## Authorization rules
 
 1. Resolve session from httpOnly cookie via Better Auth.
 2. Load membership / child profile using **session user id**.
 3. Ignore client-supplied role / family / child / entry ids except as locators re-checked against ownership.
 
-Children may only access `JournalEntry` rows where `childId` matches their profile. Parents may only read non-withdrawn `PublishedShare` rows for their family — never `JournalEntry.body`, transcripts, or suggestions.
+Children may only access `JournalEntry` / plan rows where `childId` matches their profile. Parents may only read non-withdrawn `PublishedShare` rows and read-only plan summaries for their family — never `JournalEntry.body`, transcripts, suggestions, plan-extract batches/excerpts, or plan write operations.
 
 ## Pairing (Milestone 1)
 
@@ -99,4 +207,4 @@ Integration and E2E suites must use database name `gunce_test`. Setup aborts bef
 
 ## Explicitly not implemented yet
 
-Weekly planning, goals, notifications, email verification, password recovery, emotional scoring, chatbot.
+Email verification, password recovery, emotional scoring, chatbot, automatic scheduling of exams/goals, recurring study schedules, smartwatch integration, parent push/email/SMS notifications.

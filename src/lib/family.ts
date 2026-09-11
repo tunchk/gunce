@@ -343,6 +343,8 @@ export async function revokeChildSessions(input: {
     await prisma.session.deleteMany({
       where: { userId: child.userId },
     });
+    const { revokePushSubscriptionsForChild } = await import("@/lib/reminder");
+    await revokePushSubscriptionsForChild(child.id);
   }
 
   return { ok: true as const };

@@ -57,11 +57,21 @@ beforeEach(async () => {
   }
 
   await prisma.parentGuidance.deleteMany();
+  await prisma.reminderDelivery.deleteMany();
+  await prisma.reminderOccurrence.deleteMany();
+  await prisma.reminderDayBucket.deleteMany();
+  await prisma.childPushSubscription.deleteMany();
+  await prisma.childReminderPreferences.deleteMany();
+  await prisma.planExtractCandidate.deleteMany();
+  await prisma.planExtractBatch.deleteMany();
   await prisma.journalSuggestion.deleteMany();
   await prisma.journalTranscript.deleteMany();
   await prisma.publishedShare.deleteMany();
   await prisma.sharingDraft.deleteMany();
   await prisma.journalEntry.deleteMany();
+  await prisma.planStudyStep.deleteMany();
+  await prisma.planGoal.deleteMany();
+  await prisma.planCommitment.deleteMany();
   await prisma.rateLimitBucket.deleteMany();
   await prisma.pairingInvitation.deleteMany();
   await prisma.childProfile.deleteMany();

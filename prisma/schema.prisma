@@ -153,6 +153,14 @@ model ChildProfile {
   invitations PairingInvitation[]
   journalEntries JournalEntry[]
   publishedShares PublishedShare[]
+  planCommitments PlanCommitment[]
+  planStudySteps PlanStudyStep[]
+  planGoals PlanGoal[]
+  planExtractBatches PlanExtractBatch[]
+  reminderPreferences ChildReminderPreferences?
+  pushSubscriptions ChildPushSubscription[]
+  reminderOccurrences ReminderOccurrence[]
+  reminderDayBuckets ReminderDayBucket[]
 
   @@index([familyId])
 }
@@ -207,6 +215,7 @@ model JournalEntry {
   published   PublishedShare?
   transcripts JournalTranscript[]
   suggestions JournalSuggestion[]
+  planExtractBatches PlanExtractBatch[]
 
   @@index([childId, diaryDate])
   @@index([childId, updatedAt])
@@ -297,4 +306,305 @@ model ParentGuidance {
   updatedAt            DateTime @updatedAt
 
   share PublishedShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+}
+
+enum PlanCommitmentType {
+  HOMEWORK
+  EXAM
+  COURSE
+}
+
+/// Workflow status for study/preparation steps (board + week views share this).
+enum PlanStudyStepStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum PlanGoalStatus {
+  ACTIVE
+  ACHIEVED
+  ARCHIVED
+}
+
+/// Child-reviewed plan suggestions extracted from one journal revision (private).
+enum PlanExtractBatchStatus {
+  READY
+  STALE
+  APPLIED
+}
+
+enum PlanExtractCandidateType {
+  HOMEWORK
+  EXAM
+  COURSE
+  STUDY_STEP
+}
+
+enum PlanExtractMentionKind {
+  EXPLICIT
+  PREPARATION
+}
+
+enum PlanExtractCandidateStatus {
+  PENDING
+  APPLIED
+  SKIPPED
+}
+
+/// Child-owned longer-term learning goal. Progress comes from linked PlanStudyStep rows.
+model PlanGoal {
+  id              String         @id @default(cuid())
+  childId         String
+  title           String
+  /// Optional intended outcome description.
+  description     String         @default("")
+  /// Optional target calendar date (intention, not an automatic deadline).
+  targetDate      DateTime?      @db.Date
+  status          PlanGoalStatus @default(ACTIVE)
+  revision        Int            @default(1)
+  clientRequestId String?        @unique
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  child      ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  studySteps PlanStudyStep[]
+
+  @@index([childId, status])
+  @@index([childId, targetDate])
+}
+
+/// Homework, exam, or course commitment owned by the child.
+/// Dates are calendar dates (Date-only), not wall-clock UTC timestamps.
+model PlanCommitment {
+  id              String             @id @default(cuid())
+  childId         String
+  type            PlanCommitmentType
+  title           String
+  subject         String             @default("")
+  /// Homework due date; null means “tarih belli değil”.
+  dueDate         DateTime?          @db.Date
+  /// Exam/course event date (required for EXAM and COURSE).
+  eventDate       DateTime?          @db.Date
+  /// Optional local wall time in the child's time zone, stored as "HH:mm".
+  eventTimeLocal  String?
+  completedAt     DateTime?
+  revision        Int                @default(1)
+  clientRequestId String?            @unique
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  child      ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  studySteps PlanStudyStep[]
+
+  @@index([childId, eventDate])
+  @@index([childId, dueDate])
+  @@index([childId, completedAt])
+}
+
+/// Preparation / study step. May link to homework or exam, or stand alone.
+model PlanStudyStep {
+  id                   String              @id @default(cuid())
+  childId              String
+  title                String
+  subject              String              @default("")
+  /// Planned calendar date; null = unscheduled.
+  plannedDate          DateTime?           @db.Date
+  estimatedMinutes     Int?
+  relatedCommitmentId  String?
+  /// Optional link to at most one child-owned goal (same child).
+  relatedGoalId        String?
+  /// Optional reminder wall time in the child's time zone ("HH:mm"). Null = no step reminder.
+  reminderLocalTime    String?
+  /// Authoritative workflow state. Do not infer status from completedAt.
+  status               PlanStudyStepStatus @default(TODO)
+  /// Metadata only: set when entering DONE, cleared when leaving DONE. Not a second source of truth.
+  completedAt          DateTime?
+  revision             Int                 @default(1)
+  clientRequestId      String?             @unique
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  child             ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  relatedCommitment PlanCommitment? @relation(fields: [relatedCommitmentId], references: [id], onDelete: SetNull)
+  relatedGoal       PlanGoal?       @relation(fields: [relatedGoalId], references: [id], onDelete: SetNull)
+  reminderOccurrences ReminderOccurrence[]
+
+  @@index([childId, plannedDate])
+  @@index([childId, status])
+  @@index([relatedCommitmentId])
+  @@index([relatedGoalId])
+}
+
+enum ReminderKind {
+  JOURNAL
+  STUDY_STEP
+}
+
+enum ReminderOccurrenceStatus {
+  PENDING
+  CLAIMED
+  SENT
+  SKIPPED
+  CANCELLED
+  FAILED
+  EXPIRED
+}
+
+/// Per-child reminder preferences (off by default).
+model ChildReminderPreferences {
+  id                      String   @id @default(cuid())
+  childId                 String   @unique
+  journalReminderEnabled  Boolean  @default(false)
+  /// Local wall time HH:mm for the daily journal invitation.
+  journalReminderLocalTime String  @default("19:00")
+  studyRemindersEnabled   Boolean  @default(false)
+  quietHoursStart         String   @default("21:00")
+  quietHoursEnd           String   @default("08:00")
+  revision                Int      @default(1)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  child ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+}
+
+/// Web Push subscription bound to one child and optionally one Better Auth session.
+model ChildPushSubscription {
+  id           String    @id @default(cuid())
+  childId      String
+  userId       String
+  /// Better Auth session id when registered; cleared/revoked with that session.
+  sessionId    String?
+  endpoint     String    @unique
+  p256dh       String
+  auth         String
+  userAgent    String    @default("")
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  child      ChildProfile         @relation(fields: [childId], references: [id], onDelete: Cascade)
+  deliveries ReminderDelivery[]
+
+  @@index([childId, revokedAt])
+  @@index([userId])
+  @@index([sessionId])
+}
+
+/// Durable scheduled reminder occurrence (outbox).
+model ReminderOccurrence {
+  id               String                   @id @default(cuid())
+  /// Stable key for idempotent materialization (journal:child:date or step:id:date:time).
+  occurrenceKey    String                   @unique
+  childId          String
+  kind             ReminderKind
+  studyStepId      String?
+  /// UTC instant when delivery may begin (after quiet-hours deferral).
+  scheduledAt      DateTime
+  /// Child-local calendar day used for daily caps.
+  effectiveLocalDate DateTime               @db.Date
+  status           ReminderOccurrenceStatus @default(PENDING)
+  claimToken       String?
+  claimedAt        DateTime?
+  claimExpiresAt   DateTime?
+  attemptCount     Int                      @default(0)
+  lastError        String                   @default("")
+  /// Bumped when prefs/step schedule change; stale claims must not send.
+  scheduleRevision Int                      @default(1)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  child      ChildProfile         @relation(fields: [childId], references: [id], onDelete: Cascade)
+  studyStep  PlanStudyStep?       @relation(fields: [studyStepId], references: [id], onDelete: Cascade)
+  deliveries ReminderDelivery[]
+
+  @@index([status, scheduledAt])
+  @@index([childId, effectiveLocalDate])
+  @@index([studyStepId])
+  @@index([claimExpiresAt])
+}
+
+model ReminderDelivery {
+  id             String   @id @default(cuid())
+  occurrenceId   String
+  subscriptionId String
+  /// accepted = push service accepted; not proof of display.
+  acceptedAt     DateTime?
+  failedAt       DateTime?
+  errorCode      String   @default("")
+  createdAt      DateTime @default(now())
+
+  occurrence   ReminderOccurrence    @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  subscription ChildPushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([occurrenceId, subscriptionId])
+  @@index([subscriptionId])
+}
+
+/// Daily sent-count bucket for the per-child local-day reminder cap (concurrency-safe).
+model ReminderDayBucket {
+  id        String   @id @default(cuid())
+  childId   String
+  localDate DateTime @db.Date
+  sentCount Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  child ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, localDate])
+}
+
+/// Private AI plan-suggestion batch for one journal entry revision. Never exposed to parents.
+model PlanExtractBatch {
+  id             String                 @id @default(cuid())
+  entryId        String
+  childId        String
+  /// Opaque request id so late responses / retries stay idempotent.
+  requestId      String                 @unique
+  sourceRevision Int
+  diaryDate      DateTime               @db.Date
+  status         PlanExtractBatchStatus @default(READY)
+  provider       String                 @default("")
+  /// Idempotent apply key for the whole confirmation request.
+  applyRequestId String?                @unique
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  entry      JournalEntry            @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  child      ChildProfile            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  candidates PlanExtractCandidate[]
+
+  @@index([entryId, createdAt])
+  @@index([childId, createdAt])
+}
+
+model PlanExtractCandidate {
+  id                      String                     @id @default(cuid())
+  batchId                 String
+  /// Stable order within the batch (0-based); prep steps may reference another ordinal.
+  ordinal                 Int
+  type                    PlanExtractCandidateType
+  mentionKind             PlanExtractMentionKind
+  title                   String
+  subject                 String                     @default("")
+  sourceExcerpt           String
+  /// Original date wording from the journal (may be empty).
+  datePhrase              String                     @default("")
+  /// Server-proposed calendar date from diary date + phrase (nullable).
+  proposedDate            DateTime?                  @db.Date
+  dateUncertain           Boolean                    @default(false)
+  estimatedMinutes        Int?
+  relatedCandidateOrdinal Int?
+  status                  PlanExtractCandidateStatus @default(PENDING)
+  appliedCommitmentId     String?
+  appliedStudyStepId      String?
+  /// Per-candidate plan create idempotency key.
+  applyClientRequestId    String?                    @unique
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+
+  batch PlanExtractBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, ordinal])
+  @@index([batchId])
 }

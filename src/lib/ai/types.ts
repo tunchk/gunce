@@ -49,6 +49,37 @@ export type ParentGuidanceProvider = {
   generate(input: ParentGuidanceInput): Promise<ParentGuidanceResult>;
 };
 
+export type PlanExtractCandidateDraft = {
+  type: "HOMEWORK" | "EXAM" | "COURSE" | "STUDY_STEP";
+  mentionKind: "EXPLICIT" | "PREPARATION";
+  title: string;
+  subject?: string;
+  sourceExcerpt: string;
+  datePhrase?: string;
+  proposedDate?: string | null;
+  dateUncertain?: boolean;
+  estimatedMinutes?: number | null;
+  /** 0-based index of a commitment candidate this prep step relates to. */
+  relatedCandidateIndex?: number | null;
+};
+
+export type PlanExtractInput = {
+  sourceText: string;
+  diaryDate: string;
+  timeZone: string;
+};
+
+export type PlanExtractResult = {
+  candidates: PlanExtractCandidateDraft[];
+  provider: string;
+};
+
+export type PlanExtractProvider = {
+  readonly name: string;
+  isConfigured(): boolean;
+  extract(input: PlanExtractInput): Promise<PlanExtractResult>;
+};
+
 export class ProviderError extends Error {
   constructor(
     message: string,

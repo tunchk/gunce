@@ -1,8 +1,10 @@
 import { describe, expect, it, afterEach } from "vitest";
 import {
   getAiFeatureStatus,
+  getPlanExtractProvider,
   getSummarizationProvider,
   getTranscriptionProvider,
+  setPlanExtractProviderForTests,
   setSummarizationProviderForTests,
   setTranscriptionProviderForTests,
 } from "@/lib/ai";
@@ -19,6 +21,7 @@ describe("AI test-mode production guard", () => {
   afterEach(() => {
     setTranscriptionProviderForTests(null);
     setSummarizationProviderForTests(null);
+    setPlanExtractProviderForTests(null);
     for (const [k, v] of Object.entries(prev)) {
       if (v === undefined) delete env[k];
       else env[k] = v;
@@ -32,6 +35,7 @@ describe("AI test-mode production guard", () => {
 
     expect(getTranscriptionProvider().name).toBe("openai-transcription");
     expect(getSummarizationProvider().name).toBe("openai-summarization");
+    expect(getPlanExtractProvider().name).toBe("openai-plan-extract");
   });
 
   it("allows stubs in production only with explicit allow flag (Playwright)", () => {
@@ -41,7 +45,9 @@ describe("AI test-mode production guard", () => {
 
     expect(getTranscriptionProvider().name).toBe("test-transcription");
     expect(getSummarizationProvider().name).toBe("test-summarization");
+    expect(getPlanExtractProvider().name).toBe("test-plan-extract");
     expect(getAiFeatureStatus().transcriptionAvailable).toBe(true);
     expect(getAiFeatureStatus().parentGuidanceAvailable).toBe(true);
+    expect(getAiFeatureStatus().planExtractAvailable).toBe(true);
   });
 });

@@ -15,6 +15,16 @@ const body = Source_Sans_3({
 export const metadata: Metadata = {
   title: "Günce",
   description: "Gününü anlat. Haftanı birlikte düzenleyelim.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Günce",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {

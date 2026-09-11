@@ -121,6 +121,14 @@ export async function signInParentAction(
 }
 
 export async function signOutAction() {
+  const session = await getAppSession();
+  if (session?.session?.id) {
+    const { revokePushSubscriptionsForSession } = await import("@/lib/reminder");
+    await revokePushSubscriptionsForSession(session.session.id);
+  } else if (session?.user?.role === "CHILD") {
+    const { revokePushSubscriptionsForUser } = await import("@/lib/reminder");
+    await revokePushSubscriptionsForUser(session.user.id);
+  }
   await auth.api.signOut({ headers: await headers() });
   redirect("/");
 }

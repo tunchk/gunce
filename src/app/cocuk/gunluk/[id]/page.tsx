@@ -41,6 +41,7 @@ export default async function JournalEntryPage({ params }: Props) {
             features={{
               transcriptionAvailable: features.transcriptionAvailable,
               summarizationAvailable: features.summarizationAvailable,
+              planExtractAvailable: features.planExtractAvailable,
             }}
           />
         </Panel>

@@ -1,9 +1,11 @@
 import {
   ProviderError,
   type ParentGuidanceProvider,
+  type PlanExtractProvider,
   type SummarizationProvider,
   type TranscriptionProvider,
 } from "@/lib/ai/types";
+import { resolvePlanExtractDate } from "@/lib/plan-extract-dates";
 
 /**
  * Deterministic stubs for automated tests only.
@@ -82,6 +84,116 @@ export function createTestParentGuidanceProvider(): ParentGuidanceProvider {
           : "İsterse birlikte tek bir örnek çözmek için kısa bir zaman ayırabilirsiniz.",
         provider: "test",
       };
+    },
+  };
+}
+
+/** Deterministic plan-extract stub for automated tests (acceptance-shaped). */
+export function createTestPlanExtractProvider(): PlanExtractProvider {
+  return {
+    name: "test-plan-extract",
+    isConfigured: () => true,
+    async extract(input) {
+      const source = input.sourceText.trim();
+      if (!source) {
+        throw new ProviderError("Öneri için metin boş.", "INVALID_OUTPUT");
+      }
+      if (source.includes("__FAIL_EXTRACT__")) {
+        throw new ProviderError(
+          "Plan önerisi alınamadı. Yazın ve planın duruyor.",
+          "PROVIDER_FAILURE",
+        );
+      }
+      if (source.includes("__INVALID_EXTRACT__")) {
+        throw new ProviderError("Plan önerisi geçersiz döndü.", "INVALID_OUTPUT");
+      }
+      if (source.includes("__TIMEOUT_EXTRACT__")) {
+        throw new ProviderError("Plan önerisi zaman aşımına uğradı.", "TIMEOUT");
+      }
+      if (source.includes("__EMPTY_EXTRACT__")) {
+        return { candidates: [], provider: "test" };
+      }
+
+      const candidates = [];
+
+      const examMatch = source.match(/Almanca kelime sınavım var/i);
+      if (examMatch) {
+        const yarin = resolvePlanExtractDate({
+          diaryDate: input.diaryDate,
+          datePhrase: "yarın",
+        });
+        candidates.push({
+          type: "EXAM" as const,
+          mentionKind: "EXPLICIT" as const,
+          title: "Almanca kelime sınavı",
+          subject: "Almanca",
+          sourceExcerpt: "Yarın Almanca kelime sınavım var",
+          datePhrase: "yarın",
+          proposedDate: yarin.proposedDate,
+          dateUncertain: false,
+          estimatedMinutes: null,
+          relatedCandidateIndex: null,
+        });
+      }
+
+      const prepMatch = source.match(/kelimelere çalışmam lazım/i);
+      if (prepMatch) {
+        const aksam = resolvePlanExtractDate({
+          diaryDate: input.diaryDate,
+          datePhrase: "bu akşam",
+        });
+        candidates.push({
+          type: "STUDY_STEP" as const,
+          mentionKind: "PREPARATION" as const,
+          title: "Almanca kelimelerine çalış",
+          subject: "Almanca",
+          sourceExcerpt: "Bu akşam kelimelere çalışmam lazım",
+          datePhrase: "bu akşam",
+          proposedDate: aksam.proposedDate ?? input.diaryDate,
+          dateUncertain: false,
+          estimatedMinutes: null,
+          relatedCandidateIndex: examMatch ? 0 : null,
+        });
+      }
+
+      const hwMatch = source.match(/Matematik ödevinin teslim tarihini bilmiyorum/i);
+      if (hwMatch) {
+        candidates.push({
+          type: "HOMEWORK" as const,
+          mentionKind: "EXPLICIT" as const,
+          title: "Matematik ödevi",
+          subject: "Matematik",
+          sourceExcerpt: "Matematik ödevinin teslim tarihini bilmiyorum",
+          datePhrase: "teslim tarihini bilmiyorum",
+          proposedDate: null,
+          dateUncertain: true,
+          estimatedMinutes: null,
+          relatedCandidateIndex: null,
+        });
+      }
+
+      const uncertainExam = source.match(/Galiba cuma sınav/i);
+      if (uncertainExam) {
+        const cuma = resolvePlanExtractDate({
+          diaryDate: input.diaryDate,
+          datePhrase: "Galiba cuma",
+          aiUncertain: true,
+        });
+        candidates.push({
+          type: "EXAM" as const,
+          mentionKind: "EXPLICIT" as const,
+          title: "Sınav",
+          sourceExcerpt: "Galiba cuma sınav var",
+          datePhrase: "Galiba cuma",
+          proposedDate: cuma.proposedDate,
+          dateUncertain: true,
+          estimatedMinutes: null,
+          relatedCandidateIndex: null,
+        });
+      }
+
+      // Happy memories must not become tasks — deliberately ignore basketbol pas etc.
+      return { candidates, provider: "test" };
     },
   };
 }
