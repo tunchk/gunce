@@ -68,6 +68,17 @@ enum AppNotificationKind {
   HELP_OFFER_WITHDRAWN
   HELP_ACCEPTED_CANCELLED
   HELP_REQUEST_REOPENED
+  FAMILY_EVENT_CREATED
+  FAMILY_EVENT_UPDATED
+  FAMILY_EVENT_CANCELLED
+}
+
+enum FamilyEventType {
+  SCHOOL
+  APPOINTMENT
+  FAMILY
+  ACTIVITY
+  OTHER
 }
 
 enum HelpType {
@@ -141,6 +152,7 @@ model User {
   shareRecipients          PublishedShareRecipient[]
   appNotifications         AppNotification[]
   helpOffers               HelpOffer[]
+  familyEventsCreated      FamilyEvent[] @relation("FamilyEventCreator")
 }
 
 model Session {
@@ -239,6 +251,7 @@ model ChildProfile {
   reminderOccurrences ReminderOccurrence[]
   reminderDayBuckets ReminderDayBucket[]
   helpRequests HelpRequest[]
+  familyEvents FamilyEvent[]
 
   @@index([familyId])
 }
@@ -878,4 +891,27 @@ model HelpOffer {
   @@index([guardianUserId, status])
   @@index([requestId, status])
   @@index([proposedDate])
+}
+
+/// Explicit shared family coordination event (not derived from plan/help).
+model FamilyEvent {
+  id              String          @id @default(cuid())
+  childId         String
+  createdByUserId String
+  title           String
+  eventDate       DateTime        @db.Date
+  startTimeLocal  String?
+  endTimeLocal    String?
+  eventType       FamilyEventType @default(OTHER)
+  note            String          @default("")
+  cancelledAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  child     ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  createdBy User         @relation("FamilyEventCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([childId, eventDate])
+  @@index([childId, cancelledAt])
+  @@index([createdByUserId])
 }

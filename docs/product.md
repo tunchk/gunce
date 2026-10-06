@@ -244,6 +244,12 @@ Hardens the M12B help workflow when schedules change or a guardian can no longer
 
 **Out of scope:** Family Calendar (M13), chat, availability model, conflict engine.
 
+## Milestone 13 — Family coordination calendar (current)
+
+**Status: implemented in this repository.**
+
+Shared weekly coordination view aggregating (without duplicating) plan items, accepted help sessions, and explicit `FamilyEvent`s. Child uses **Haftam → Aile takvimi**; parent uses `/veli/takvim`. Basic **Olası çakışma** warnings only. No recurrence, external calendars, AI scheduling, or chat.
+
 ## Milestone 11 — Direct guardian visibility & notification center (historical)
 
 **Status: shipped; partially superseded by M12A for new creates.**

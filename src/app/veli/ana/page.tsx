@@ -149,6 +149,18 @@ export default async function ParentHomePage() {
         )}
 
         <Panel>
+          <h2 className="text-lg font-semibold">Aile takvimi</h2>
+          <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+            Ortak etkinlikler, planlanan yardımlar ve haftalık plan bir arada.
+          </p>
+          <div className="mt-4">
+            <Link href="/veli/takvim">
+              <Button variant="secondary">Aile takvimini aç</Button>
+            </Link>
+          </div>
+        </Panel>
+
+        <Panel>
           <h2 className="text-lg font-semibold">Yaklaşan plan</h2>
           <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
             Salt okunur. Günlük yazıları buraya karışmaz; tamamlanma notları çocuğa özeldir.

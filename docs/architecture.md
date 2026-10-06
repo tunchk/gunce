@@ -91,6 +91,20 @@ Migration `20261006120000_m12a_private_default_journals` only changes the **colu
 Migration `20261006220000_m12b_help_workflow` adds help enums/tables and notification kinds.
 Migration `20261006230000_m12b1_help_lifecycle` adds M12B.1 notification kinds only (no table shape change).
 Migration `20261006240000_m12b1_session_invalidated` adds `HelpRequest.sessionInvalidatedAt` so reopen UX is not triggered by pending-only withdraws.
+Migration `20261006250000_m13_family_calendar` adds `FamilyEvent` + `FAMILY_EVENT_*` notification kinds.
+
+## Family coordination calendar (Milestone 13)
+
+Aggregation via `getFamilyCoordinationWeek` (not a Calendar table):
+
+| Source | Kind | Notes |
+|--------|------|-------|
+| `PlanStudyStep` | STUDY_STEP | Date-only (`plannedDate`); reminder time is not a start |
+| `PlanCommitment` | COMMITMENT | due/event date; `eventTimeLocal` as point if present |
+| Accepted `HelpOffer` | HELP_SESSION | Derived; disappears on cancel/reopen |
+| `FamilyEvent` | FAMILY_EVENT | Explicit shared event; creator-only mutate |
+
+Conflict label: **Olası çakışma** (interval/interval, point/interval, exact point/point). Date-only same-day items do not auto-conflict.
 
 ## Journal & sharing model (Milestone 2 — share path)
 

@@ -900,9 +900,17 @@ export async function listChildHelpSessions(
   opts?: { fromDate?: string; toDate?: string },
 ) {
   const child = await requireChildProfile(childUserId);
+  return listAcceptedHelpSessionsForChildId(child.id, opts);
+}
+
+/** Active accepted/completed help sessions for a child (caller must authorize). */
+export async function listAcceptedHelpSessionsForChildId(
+  childId: string,
+  opts?: { fromDate?: string; toDate?: string },
+) {
   const rows = await prisma.helpRequest.findMany({
     where: {
-      childId: child.id,
+      childId,
       status: { in: ["ACCEPTED", "COMPLETED"] },
     },
     include: requestInclude,

@@ -10,6 +10,7 @@ import {
   listMissedStudySteps,
 } from "@/lib/plan";
 import { listChildHelpRequests, listChildHelpSessions } from "@/lib/help";
+import { getTodayFamilyCoordinationExtras } from "@/lib/family-calendar";
 import { formatDayLabelTr } from "@/lib/plan-dates";
 import { commitmentTypeLabel } from "@/lib/plan-ui";
 import { getAppSession, getChildProfileForUser } from "@/lib/session";
@@ -22,13 +23,15 @@ export default async function ChildHomePage() {
   if (!child) redirect("/cocuk/giris");
   if (child.onboardingStep !== "COMPLETE") redirect("/cocuk");
 
-  const [nextStep, week, missed, helpRequests, helpSessions] = await Promise.all([
-    getNextStudyStepForToday(session.user.id),
-    getWeekPlanForChild(session.user.id),
-    listMissedStudySteps(session.user.id),
-    listChildHelpRequests(session.user.id),
-    listChildHelpSessions(session.user.id),
-  ]);
+  const [nextStep, week, missed, helpRequests, helpSessions, todayExtras] =
+    await Promise.all([
+      getNextStudyStepForToday(session.user.id),
+      getWeekPlanForChild(session.user.id),
+      listMissedStudySteps(session.user.id),
+      listChildHelpRequests(session.user.id),
+      listChildHelpSessions(session.user.id),
+      getTodayFamilyCoordinationExtras({ childUserId: session.user.id }),
+    ]);
 
   const todaySessions = helpSessions.filter(
     (s) => s.status === "ACCEPTED" && s.proposedDate === week.today,
@@ -41,7 +44,7 @@ export default async function ChildHomePage() {
   const todayCommitments = todayDay?.commitments.filter((c) => !c.completedAt) ?? [];
   const todayOpenSteps =
     todayDay?.studySteps.filter((s) => s.status !== "DONE") ?? [];
-
+  const todayFamilyEvents = todayExtras.familyEvents;
   const approachingCommitments = week.days
     .filter((d) => d.date > week.today)
     .flatMap((d) =>
@@ -80,13 +83,11 @@ export default async function ChildHomePage() {
         </Panel>
 
         <Panel>
-          <h2 className="text-lg font-semibold">Bugün</h2>
+          <h2 className="text-lg font-semibold">Bugün yapacakların</h2>
           <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
             {formatDayLabelTr(week.today)}
           </p>
-          {todayCommitments.length === 0 &&
-          todayOpenSteps.length === 0 &&
-          todaySessions.length === 0 ? (
+          {todayCommitments.length === 0 && todayOpenSteps.length === 0 ? (
             <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
               Bugün için planlanmış açık bir iş yok.
             </p>
@@ -106,6 +107,14 @@ export default async function ChildHomePage() {
                   </Link>
                 </li>
               ))}
+            </ul>
+          )}
+        </Panel>
+
+        {todaySessions.length > 0 || todayFamilyEvents.length > 0 ? (
+          <Panel>
+            <h2 className="text-lg font-semibold">Bugünkü diğer planlar</h2>
+            <ul className="mt-3 space-y-2">
               {todaySessions.map((s) => (
                 <li key={s.requestId} className="text-sm leading-relaxed">
                   <Link
@@ -116,9 +125,22 @@ export default async function ChildHomePage() {
                   </Link>
                 </li>
               ))}
+              {todayFamilyEvents.map((ev) => (
+                <li key={ev.id} className="text-sm leading-relaxed">
+                  <Link href={ev.href} className="font-semibold underline">
+                    Aile: {ev.title}
+                    {ev.startTimeLocal ? ` · ${ev.startTimeLocal}` : ""}
+                  </Link>
+                  {ev.possibleConflict ? (
+                    <span className="ml-2 text-xs" style={{ color: "var(--muted)" }}>
+                      Olası çakışma
+                    </span>
+                  ) : null}
+                </li>
+              ))}
             </ul>
-          )}
-        </Panel>
+          </Panel>
+        ) : null}
 
         {(missed.length > 0 ||
           approachingCommitments.length > 0 ||
