@@ -23,6 +23,7 @@ import {
   prisma,
   request,
   signInAndGetCookie,
+  markEntryLegacyPrivate,
 } from "./helpers";
 
 function params(id: string) {
@@ -363,6 +364,7 @@ describe("Voice + AI summary (Milestone 3)", () => {
       expectedRevision: entry.revision,
     });
 
+    await markEntryLegacyPrivate(entry.id);
     const draft = await updateSharingDraft({
       childUserId,
       entryId: entry.id,

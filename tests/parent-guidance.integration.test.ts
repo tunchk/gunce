@@ -18,6 +18,7 @@ import {
   pairChildAndGetCookie,
   request,
   signInAndGetCookie,
+  markEntryLegacyPrivate,
 } from "./helpers";
 
 function params(shareId: string) {
@@ -65,6 +66,7 @@ describe("Parent share detail + guidance", () => {
       childUserId,
       body: "ÖZEL_GİZLİ_GÜNLÜK_METNİ asla veliye gitmemeli",
     });
+    await markEntryLegacyPrivate(entry.id);
     const draft = await updateSharingDraft({
       childUserId,
       entryId: entry.id,

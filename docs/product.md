@@ -174,13 +174,80 @@ Presentation and navigation polish only — no new domain features.
 
 **Out of scope for Milestone 10:** legal guardianship docs, custody workflows, manager transfer, parent plan edits, production email provider.
 
+## Milestone 11 — Direct guardian visibility & notification center (current)
+
+**Status: implemented in this repository.**
+
+Intentional product change for **new** journal entries:
+
+- When a child saves a non-empty entry, all currently authorized guardians can read the **full saved narrative**
+- No publish button, sharing draft, recipient picker, or guardian-message composition for new entries
+- AI summary + guardian support guidance supplement the narrative; they never replace access to it
+- Guardians cannot send messages, replies, tasks, or acknowledgments to the child
+- Notice in the editor: “Buraya kaydettiklerini velilerin görebilir.”
+
+**Visibility modes**
+
+| Mode | Who | Notes |
+|------|-----|-------|
+| `LEGACY_PRIVATE` | Pre-M11 entries (migrated) | Original private narrative; approved `PublishedShare` snapshots + recipient rules still work |
+| `GUARDIAN_VISIBLE` | New entries | Created server-side; no `SharingDraft`/`PublishedShare`; active `ChildGuardianAccess` determines read access |
+
+New-model history follows **current** active access: a newly accepted guardian can read it; a removed guardian cannot. Joining does **not** flood historical notifications.
+
+**Notifications**
+
+- Database-backed in-app center for both roles (bell, Yeni/Tümü, pagination, per-recipient read, mark all read)
+- First successful non-empty save → one notification per active guardian (deduped by uniqueness key; autosaves do not duplicate or reset read)
+- Child center: existing journal/study reminders (no push/VAPID required for in-app delivery)
+- Generic list copy only (no narrative excerpts)
+
+**AI**
+
+- Durable revision-keyed jobs (`JournalAiJob`); process with `npm run jobs:process`
+- Does not block save; stale revisions cannot overwrite current output
+
+**Out of scope for Milestone 11:** guardian push/email delivery, WebSockets, consent wizard, guardian replies.
+
+## Milestone 11.1 — Reliable AI, planning UX, reflection & plan notifications (current)
+
+**Status: implemented in this repository.**
+
+Builds on Milestone 11 guardian visibility without adding chat, guardian→child messages, or assigned tasks.
+
+**AI processing**
+
+- Root cause of stuck “hazırlanıyor”: jobs stayed `PENDING` because plain `next`/`dev:app` never ran a worker, and one-shot `jobs:process` previously missed `.env.local` keys.
+- Local: `npm run dev` starts Next.js + continuous `jobs:worker` together (poll loop, no overlapping ticks, SIGINT/SIGTERM exit).
+- Keep `npm run jobs:process` as one-shot. Production still needs an external scheduler/worker.
+- Honest parent UI states: queued / processing / failed / unavailable / ready; rate-limited retry; bounded polling while detail is visible.
+
+**Planning UI**
+
+- Wider plan shell (`planWide`); Pano uses container-width tabs vs three columns (not viewport-only).
+- Neutral week heading for exams/events; no duplicate dates; shared status badges (Yapılacak / Yapıyorum / Tamamlandı + overdue date warning).
+
+**Completion reflection**
+
+- Optional “Neler yaptın?” after DONE; skip/failure does not undo completion.
+- Stored on `PlanStudyStep.completionReflection`; cleared with `completedAt` on reopen; guardians with access can read on `/veli/plan/adim/[id]`.
+- Voice reflection not wired this milestone (typed only).
+
+**Plan notifications**
+
+- Kinds: `PLAN_RECORD_CREATED`, `PLAN_SCHEDULE_CHANGED`, `PLAN_STEP_COMPLETED`, `PLAN_EXTRACT_BATCH`.
+- Extract apply → one grouped notification per guardian; no per-item duplicates for that apply.
+- Deduped uniqueness keys; removal invalidates; reflection updates completion notification body without a new item or read reset.
+
+**Out of scope:** push/email for plan events, chat, hosting, time-window batching of unrelated edits.
+
 ## Design principles
 
 - Separate parent and child identities and sessions
 - Never trust client-supplied `familyId`, `childId`, or role as authorization evidence
 - No role-switch control that lets a child enter the parent area
 - Minimize data collected (no exact birth date, school name, or home address in onboarding)
-- Private journal text, audio, transcripts, and AI suggestions are never logged or exposed to parents automatically
+- **New** journal entries (`GUARDIAN_VISIBLE`) are readable by active guardians after save; **legacy** private text (`LEGACY_PRIVATE`) is never exposed without an approved share snapshot
 - All user-facing interface text in Turkish
 - Mobile-first, large touch targets, accessible forms
 - Do not claim external provider retention policies unless independently verified

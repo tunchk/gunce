@@ -36,6 +36,12 @@ export function JournalEditor({
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [summaryMsg, setSummaryMsg] = useState<string | undefined>();
   const [persistedBody, setPersistedBody] = useState(initial.body);
+  const [guardianAiStatus, setGuardianAiStatus] = useState(initial.guardianAiStatus);
+  const [activeGuardianCount, setActiveGuardianCount] = useState(
+    initial.activeGuardianCount,
+  );
+  const [finished, setFinished] = useState(false);
+  const [aiRetryBusy, setAiRetryBusy] = useState(false);
   const latestRef = useRef({ body: initial.body, revision: initial.revision });
   const persistedBodyRef = useRef(initial.body);
   const saveStateRef = useRef<SaveState>("idle");
@@ -76,6 +82,8 @@ export function JournalEditor({
     setPersistedBody(entry.body);
     persistedBodyRef.current = entry.body;
     latestRef.current = { body: entry.body, revision: entry.revision };
+    setGuardianAiStatus(entry.guardianAiStatus);
+    setActiveGuardianCount(entry.activeGuardianCount);
   }, []);
 
   const save = useCallback(
@@ -130,6 +138,9 @@ export function JournalEditor({
           applyEntry(data.entry);
           setSaveState("saved");
           saveStateRef.current = "saved";
+          if (opts?.markSaved && data.entry.visibility === "GUARDIAN_VISIBLE") {
+            setFinished(true);
+          }
           return true;
         } catch {
           if (seq === seqRef.current) {
@@ -396,11 +407,77 @@ export function JournalEditor({
     await tryNavigate(href);
   }
 
+  async function retryGuardianAi() {
+    setAiRetryBusy(true);
+    setError(undefined);
+    try {
+      const res = await fetch(`/api/child/journal/${entryId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op: "retry_guardian_ai" }),
+      });
+      const data = (await res.json()) as { entry?: ChildEntryView; error?: string };
+      if (!res.ok || !data.entry) {
+        setError(data.error || "Özet yeniden denenemedi.");
+        return;
+      }
+      applyEntry(data.entry);
+    } catch {
+      setError("Bağlantı hatası.");
+    } finally {
+      setAiRetryBusy(false);
+    }
+  }
+
+  const isGuardianVisible = initial.visibility === "GUARDIAN_VISIBLE";
+  const hasGuardians = activeGuardianCount > 0;
+
+  useEffect(() => {
+    if (!isGuardianVisible) return;
+    if (
+      guardianAiStatus !== "PENDING" &&
+      guardianAiStatus !== "STALE" &&
+      guardianAiStatus !== "QUEUED" &&
+      guardianAiStatus !== "PROCESSING"
+    ) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/child/journal/${entryId}`, {
+            cache: "no-store",
+          });
+          if (!res.ok) return;
+          const data = (await res.json()) as { entry?: ChildEntryView };
+          if (data.entry) {
+            setGuardianAiStatus(data.entry.guardianAiStatus);
+            setActiveGuardianCount(data.entry.activeGuardianCount);
+          }
+        } catch {
+          // ignore
+        }
+      })();
+    }, 8_000);
+    return () => window.clearInterval(timer);
+  }, [entryId, guardianAiStatus, isGuardianVisible]);
+
   const statusLabel =
     saveState === "saving"
       ? "Kaydediliyor…"
       : saveState === "saved"
-        ? "Kaydedildi"
+        ? isGuardianVisible
+          ? guardianAiStatus === "FAILED" || guardianAiStatus === "UNAVAILABLE"
+            ? "Kaydedildi · Özet hazırlanamadı"
+            : guardianAiStatus === "PENDING" ||
+                guardianAiStatus === "STALE" ||
+                guardianAiStatus === "QUEUED" ||
+                guardianAiStatus === "PROCESSING"
+              ? "Kaydedildi · Özet hazırlanıyor"
+              : hasGuardians
+                ? "Kaydedildi · Velilerin görebilir"
+                : "Kaydedildi · Şu an bağlı veli yok"
+          : "Kaydedildi"
         : saveState === "failed"
           ? "Kaydedilemedi"
           : saveState === "conflict"
@@ -416,20 +493,103 @@ export function JournalEditor({
   const hasNarrative = Boolean(body.trim());
   const showLaterSteps = hasNarrative || Boolean(acceptedSummary.trim()) || Boolean(pendingSuggestion);
 
+  if (finished && isGuardianVisible && saveState === "saved" && hasNarrative) {
+    return (
+      <div className="space-y-4" role="status">
+        <p
+          className="rounded-2xl border p-3 text-sm leading-relaxed"
+          style={{ borderColor: "var(--line)", background: "var(--accent-soft)" }}
+        >
+          Buraya kaydettiklerini velilerin görebilir.
+        </p>
+        <p className="text-lg font-semibold">{statusLabel}</p>
+        <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+          Anlatımın kaydedildi. İstersen düzeltmeye devam edebilir veya planına ekleyebilirsin.
+        </p>
+        {(guardianAiStatus === "FAILED" || guardianAiStatus === "UNAVAILABLE") &&
+        hasNarrative ? (
+          <button
+            type="button"
+            disabled={aiRetryBusy}
+            onClick={() => void retryGuardianAi()}
+            className="inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
+            style={{ border: "1px solid var(--line)" }}
+          >
+            {aiRetryBusy ? "Deneniyor…" : "Özeti yeniden dene"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setFinished(false)}
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
+          style={{ background: "var(--accent)", color: "white" }}
+        >
+          Düzenlemeye dön
+        </button>
+        {features.planExtractAvailable ? (
+          <button
+            type="button"
+            onClick={() => void flushThenNavigate(`/cocuk/gunluk/${entryId}/plan-oneri`)}
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
+            style={{ border: "1px solid var(--line)" }}
+          >
+            Planıma neler ekleyebilirim?
+          </button>
+        ) : null}
+        {error ? (
+          <p className="text-sm" style={{ color: "var(--danger)" }} role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {isGuardianVisible ? (
+        <p
+          className="rounded-2xl border p-3 text-sm leading-relaxed"
+          style={{ borderColor: "var(--line)", background: "var(--accent-soft)" }}
+          role="status"
+        >
+          Buraya kaydettiklerini velilerin görebilir.
+        </p>
+      ) : null}
+
       <div
         className="flex flex-wrap items-center justify-between gap-2 text-sm"
         style={{ color: "var(--muted)" }}
         aria-live="polite"
       >
         <span className="font-semibold">{statusLabel}</span>
-        {initial.published ? (
+        {isGuardianVisible ? (
+          <span>
+            {hasGuardians
+              ? "Kayıt sonrası veliler görebilir"
+              : "Bağlı veli yok · yine de kaydedebilirsin"}
+          </span>
+        ) : initial.published ? (
           <span>Velin şunu görecek · paylaşılıyor</span>
         ) : (
           <span>Bende kalacak · özel</span>
         )}
       </div>
+
+      {(guardianAiStatus === "FAILED" || guardianAiStatus === "UNAVAILABLE") &&
+      isGuardianVisible &&
+      hasNarrative &&
+      saveState === "saved" ? (
+        <button
+          type="button"
+          disabled={aiRetryBusy}
+          onClick={() => void retryGuardianAi()}
+          className="inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
+          style={{ border: "1px solid var(--line)" }}
+        >
+          {aiRetryBusy ? "Deneniyor…" : "Özeti yeniden dene"}
+        </button>
+      ) : null}
 
       <section className="space-y-3" aria-labelledby="stage-write">
         <div>
@@ -437,7 +597,9 @@ export function JournalEditor({
             1. Anlat / yaz
           </h2>
           <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
-            Yazın özel kalır. İstersen yalnızca kaydedip çıkabilirsin.
+            {isGuardianVisible
+              ? "Yazdıkların kaydedilince velilerin görebilir. İstersen düzenleyip tekrar kaydedebilirsin."
+              : "Yazın özel kalır. İstersen yalnızca kaydedip çıkabilirsin."}
           </p>
         </div>
 
@@ -504,7 +666,7 @@ export function JournalEditor({
           className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
           style={{ background: "var(--accent)", color: "white" }}
         >
-          Kaydet (bende kalsın)
+          {isGuardianVisible ? "Bitirdim" : "Kaydet (bende kalsın)"}
         </button>
       </section>
 
@@ -515,7 +677,9 @@ export function JournalEditor({
               2. Gözden geçir
             </h2>
             <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
-              İsteğe bağlı. Özet kabul etmek paylaşım demek değildir.
+              {isGuardianVisible
+                ? "İsteğe bağlı. Özet kabul etmek kaydı değiştirir; ayrıca yayınlaman gerekmez."
+                : "İsteğe bağlı. Özet kabul etmek paylaşım demek değildir."}
             </p>
           </div>
 
@@ -620,21 +784,25 @@ export function JournalEditor({
         <section className="space-y-3" aria-labelledby="stage-share">
           <div>
             <h2 id="stage-share" className="text-lg font-semibold">
-              3. İstersen paylaş veya planına ekle
+              {isGuardianVisible ? "3. Planına ekle" : "3. İstersen paylaş veya planına ekle"}
             </h2>
             <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
-              Zorunlu değil. Paylaşım açık onay ister; planına eklediklerini velin de görebilir.
+              {isGuardianVisible
+                ? "Planına eklediklerini velin de görebilir. Günlük için ayrıca paylaşmana gerek yok."
+                : "Zorunlu değil. Paylaşım açık onay ister; planına eklediklerini velin de görebilir."}
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void flushThenNavigate(`/cocuk/gunluk/${entryId}/paylas`)}
-            className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
-            style={{ background: "var(--accent-soft)", color: "var(--ink)" }}
-          >
-            Paylaşımı hazırla
-          </button>
+          {!isGuardianVisible ? (
+            <button
+              type="button"
+              onClick={() => void flushThenNavigate(`/cocuk/gunluk/${entryId}/paylas`)}
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
+              style={{ background: "var(--accent-soft)", color: "var(--ink)" }}
+            >
+              Paylaşımı hazırla
+            </button>
+          ) : null}
 
           {features.planExtractAvailable ? (
             <button

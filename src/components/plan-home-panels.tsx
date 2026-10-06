@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { CompletionReflectionPrompt } from "@/components/completion-reflection-prompt";
+import { StudyStatusBadge } from "@/components/study-status-badge";
 import { Button, FieldError } from "@/components/ui";
 import type { StudyStepView } from "@/lib/plan";
+import { calendarDateInTimeZone } from "@/lib/plan-dates";
 import { studyStepMeta } from "@/lib/plan-ui";
 
 const NOTICE_KEY = "gunce-plan-parent-notice-seen";
@@ -58,27 +61,40 @@ export function NextStudyStepPanel({
   const [pending, setPending] = useState(false);
   const [moving, setMoving] = useState(false);
   const [moveDate, setMoveDate] = useState("");
+  const [localStep, setLocalStep] = useState(step);
+  const [showReflection, setShowReflection] = useState(false);
+  const today = calendarDateInTimeZone("Europe/Istanbul");
+
+  useEffect(() => {
+    setLocalStep(step);
+  }, [step]);
 
   async function complete() {
-    if (!step) return;
+    if (!localStep) return;
     setPending(true);
     setError(undefined);
     try {
-      const res = await fetch(`/api/child/plan/step/${step.id}`, {
+      const res = await fetch(`/api/child/plan/step/${localStep.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           op: "set_status",
-          expectedRevision: step.revision,
+          expectedRevision: localStep.revision,
           status: "DONE",
         }),
       });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) {
+      const data = (await res.json()) as {
+        error?: string;
+        studyStep?: StudyStepView;
+      };
+      if (!res.ok || !data.studyStep) {
         setError(data.error || "Kaydedilemedi.");
         setPending(false);
         return;
       }
+      setLocalStep(data.studyStep);
+      setShowReflection(true);
+      setPending(false);
       router.refresh();
     } catch {
       setError("Bağlantı hatası.");
@@ -87,19 +103,19 @@ export function NextStudyStepPanel({
   }
 
   async function reschedule() {
-    if (!step || !moveDate) {
+    if (!localStep || !moveDate) {
       setError("Yeni bir gün seç.");
       return;
     }
     setPending(true);
     setError(undefined);
     try {
-      const res = await fetch(`/api/child/plan/step/${step.id}`, {
+      const res = await fetch(`/api/child/plan/step/${localStep.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           op: "reschedule",
-          expectedRevision: step.revision,
+          expectedRevision: localStep.revision,
           plannedDate: moveDate,
           allowAfterDeadline: false,
         }),
@@ -117,12 +133,12 @@ export function NextStudyStepPanel({
           setPending(false);
           return;
         }
-        const retry = await fetch(`/api/child/plan/step/${step.id}`, {
+        const retry = await fetch(`/api/child/plan/step/${localStep.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             op: "reschedule",
-            expectedRevision: step.revision,
+            expectedRevision: localStep.revision,
             plannedDate: moveDate,
             allowAfterDeadline: true,
           }),
@@ -148,7 +164,7 @@ export function NextStudyStepPanel({
     }
   }
 
-  if (!step) {
+  if (!localStep) {
     return (
       <div>
         <h2 className="text-lg font-semibold">Sıradaki adımım</h2>
@@ -173,12 +189,18 @@ export function NextStudyStepPanel({
   return (
     <div>
       <h2 className="text-lg font-semibold">Sıradaki adımım</h2>
-      <p className="mt-2 text-base font-medium">{step.title}</p>
+      <div className="mt-2">
+        <StudyStatusBadge
+          status={localStep.status}
+          plannedDate={localStep.plannedDate}
+          today={today}
+        />
+      </div>
+      <p className="mt-2 text-base font-medium">{localStep.title}</p>
       <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
-        {studyStepMeta(step)}
-        {step.status === "IN_PROGRESS" ? " · Yapıyorum" : null}
+        {studyStepMeta(localStep)}
       </p>
-      {!moving ? (
+      {!moving && localStep.status !== "DONE" ? (
         <div className="mt-4 flex flex-col gap-2">
           <Button type="button" disabled={pending} onClick={() => void complete()}>
             Tamamladım
@@ -194,7 +216,7 @@ export function NextStudyStepPanel({
             </Button>
           ) : (
             <Link
-              href={`/cocuk/plan/adim/${step.id}`}
+              href={`/cocuk/plan/adim/${localStep.id}`}
               className="inline-flex min-h-12 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
               style={{ background: "var(--accent-soft)" }}
             >
@@ -203,14 +225,14 @@ export function NextStudyStepPanel({
           )}
           {!compact ? (
             <Link
-              href={`/cocuk/plan/adim/${step.id}`}
+              href={`/cocuk/plan/adim/${localStep.id}`}
               className="inline-flex min-h-11 items-center justify-center text-sm font-semibold underline"
             >
               Düzenle
             </Link>
           ) : null}
         </div>
-      ) : (
+      ) : moving ? (
         <div className="mt-4 space-y-3">
           <label className="block text-sm font-semibold" htmlFor="move-date">
             Yeni gün
@@ -238,7 +260,18 @@ export function NextStudyStepPanel({
             Vazgeç
           </Button>
         </div>
-      )}
+      ) : null}
+
+      {showReflection && localStep.status === "DONE" ? (
+        <CompletionReflectionPrompt
+          step={localStep}
+          onUpdated={(next) => setLocalStep(next)}
+          onDismiss={() => {
+            setShowReflection(false);
+            router.refresh();
+          }}
+        />
+      ) : null}
       <FieldError message={error} />
     </div>
   );
@@ -260,7 +293,12 @@ export function MissedStepsPanel({ steps }: { steps: StudyStepView[] }) {
               className="block rounded-2xl border px-3 py-3 text-sm"
               style={{ borderColor: "var(--line)" }}
             >
-              <span className="font-medium">{s.title}</span>
+              <StudyStatusBadge
+                status={s.status}
+                plannedDate={s.plannedDate}
+                today={calendarDateInTimeZone("Europe/Istanbul")}
+              />
+              <span className="mt-2 block font-medium">{s.title}</span>
               <span className="mt-1 block" style={{ color: "var(--muted)" }}>
                 {studyStepMeta(s)}
               </span>

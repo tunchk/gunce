@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { signOutAction } from "@/app/actions";
+import { NotificationBell } from "@/components/notification-bell";
 import { NextStudyStepPanel, PlanParentNotice } from "@/components/plan-home-panels";
 import { Button, ChildSettingsLink, Panel, Shell } from "@/components/ui";
 import { avatarEmoji } from "@/lib/constants";
@@ -38,7 +38,12 @@ export default async function ChildHomePage() {
       title={`${avatarEmoji(child.avatarKey)} ${child.displayName}`}
       subtitle="Bugün nasılsın?"
       withChildNav
-      headerAction={<ChildSettingsLink />}
+      headerAction={
+        <div className="flex items-center gap-2">
+          <NotificationBell href="/cocuk/bildirimler" />
+          <ChildSettingsLink />
+        </div>
+      }
     >
       <div className="space-y-4">
         <PlanParentNotice />
@@ -46,7 +51,7 @@ export default async function ChildHomePage() {
         <Panel>
           <h2 className="text-xl font-semibold">Günümü anlat</h2>
           <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            Bugününü yaz veya sesle anlat. İstersen sonra paylaşır veya planına eklersin.
+            Bugününü yaz veya sesle anlat. Kaydettiklerini velilerin görebilir.
           </p>
           <Link href="/cocuk/gunluk/yeni" className="mt-4 block">
             <Button>Günümü anlat</Button>

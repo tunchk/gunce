@@ -34,26 +34,55 @@ Mail delivery is abstracted in `src/lib/mail.ts` (`sendMail`). Local transports 
 
 Pre-migration authorization was “any `FamilyMembership` of `PublishedShare.familyId`”. Migration backfills MANAGER access for each membership×child and recipients for each share×membership (generation 1). Parent list/detail/guidance now require active access **and** matching recipient generation.
 
-## Journal & sharing model (Milestone 2)
+## Journal visibility (Milestone 11)
 
-Private writing and parent-visible content are separate records:
+| Mode | Model fields | Parent access |
+|------|--------------|---------------|
+| `LEGACY_PRIVATE` | Pre-existing entries (migration) | Only via approved `PublishedShare` + matching `PublishedShareRecipient` generation |
+| `GUARDIAN_VISIBLE` | New creates | Full saved `JournalEntry.body` for active `ChildGuardianAccess`; no share draft/snapshot |
+
+Related:
 
 | Concept | Model | Notes |
 |---------|-------|-------|
-| Private journal | `JournalEntry` | `body` is child-only; never returned by parent APIs |
+| Guardian AI | `JournalGuardianAi` | Summary + conversation opener + support action; revision-keyed; guardian-only |
+| AI jobs | `JournalAiJob` | Durable outbox; coalesce by `entryId`+`sourceRevision`; local `npm run jobs:worker` / one-shot `jobs:process` |
+| Notifications | `AppNotification` | Per-recipient read; uniqueness keys; soft `invalidatedAt` on revoke/delete/withdraw |
+| Completion reflection | `PlanStudyStep.completionReflection` | Optional child self-report after DONE; cleared with `completedAt` on reopen |
+| Plan notify kinds | `PLAN_*` | Create / schedule change / step completed / extract batch (grouped) |
+
+Local development runs `npm run dev` = Next.js + continuous worker (loads `.env` then `.env.local`). Do not start job loops inside request handlers.
+
+Semantics:
+
+- First non-empty save of a `GUARDIAN_VISIBLE` entry notifies each active guardian once (`firstNotifiedAt` + uniqueness key).
+- Autosaves update the narrative and re-enqueue AI; they do not create duplicate notifications or reset read state.
+- Empty shells create no notifications.
+- AI must not block save; stale jobs cannot overwrite a newer revision.
+- Opening the notification list does not mark items read; opening an item (or the journal detail) may mark that recipient’s item read.
+- In-app reminder notifications reuse `ReminderOccurrence` eligibility and do not require VAPID/push devices.
+
+Legacy share routes (`/veli/paylasim/[shareId]`) and recipient rules remain. New guardian detail: `/veli/gunluk/[entryId]`.
+
+## Journal & sharing model (Milestone 2 — legacy path)
+
+Private writing and parent-visible **snapshots** remain separate for `LEGACY_PRIVATE` entries:
+
+| Concept | Model | Notes |
+|---------|-------|-------|
+| Private journal | `JournalEntry` | `body` stays child-only for `LEGACY_PRIVATE` |
 | Parent-facing draft | `SharingDraft` | Independent `parentMessage` + `supportRequest`; editable without publishing |
 | Published snapshot | `PublishedShare` | Approved copy parents can read; soft-withdrawn via `withdrawnAt` |
 | Parent approach tips | `ParentGuidance` | Cached AI tips tied to `sourceDraftRevision`; built only from published fields |
 
-Parent home shows excerpts of approved `parentMessage` with **Detayı gör**. Detail at `/veli/paylasim/[shareId]` shows the full published message, the child’s support request (if any), and labeled AI approach tips. Pairing/session controls live under `/veli/ayarlar`.
+Parent home shows approved legacy share excerpts with **Detayı gör**, plus recent `GUARDIAN_VISIBLE` entries (deduped by source entry). Pairing/session controls live under `/veli/ayarlar`.
 
-Semantics:
+Semantics (legacy):
 
-- New entries are private by default.
 - Editing `JournalEntry.body` does not change `PublishedShare`.
 - Editing `SharingDraft` does not change an existing published snapshot until the child publishes again (“Paylaşımı güncelle”).
 - Withdrawal sets `withdrawnAt`; subsequent parent queries exclude the row. Withdrawal does not erase what a parent already read; republishing is allowed.
-- Deleting a `JournalEntry` cascades drafts, published shares, transcripts, and suggestions.
+- Deleting a `JournalEntry` cascades drafts, published shares, transcripts, suggestions, AI rows, and invalidates notifications.
 - Optimistic concurrency via `revision` / `expectedRevision` on body and draft updates.
 - Retry-safe create via optional unique `clientRequestId`.
 - Parent list/detail APIs send `Cache-Control: private, no-store`.

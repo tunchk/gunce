@@ -7,8 +7,12 @@ import { formatDayLabelTr } from "@/lib/plan-dates";
 import { getAppSession, getChildProfileForUser } from "@/lib/session";
 
 function sharingStateLabel(entry: {
+  visibility: "LEGACY_PRIVATE" | "GUARDIAN_VISIBLE";
   published: null | { hasUnpublishedChanges: boolean };
-}): { text: string; tone: "private" | "shared" | "pending" } {
+}): { text: string; tone: "private" | "shared" | "pending" | "visible" } {
+  if (entry.visibility === "GUARDIAN_VISIBLE") {
+    return { text: "Velilerin görebilir", tone: "visible" };
+  }
   if (!entry.published) {
     return { text: "Bende kalacak · özel", tone: "private" };
   }
@@ -29,7 +33,7 @@ export default async function JournalListPage() {
   return (
     <Shell
       title="Günlüğüm"
-      subtitle="Özel yazıların. Özet veya taslak, paylaşılmadığı sürece velin görmez."
+      subtitle="Yeni kayıtlarını velilerin görebilir. Eski özel yazılar yalnızca paylaşınca görünür."
       withChildNav
       headerAction={<ChildSettingsLink />}
     >

@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CompletionReflectionPrompt } from "@/components/completion-reflection-prompt";
+import { StudyStatusBadge } from "@/components/study-status-badge";
 import { Button, FieldError } from "@/components/ui";
 import type { CommitmentView, StudyStepStatus, StudyStepView } from "@/lib/plan";
-import {
-  addCalendarDays,
-  formatDayLabelTr,
-  formatLongDateTr,
-} from "@/lib/plan-dates";
+import { addCalendarDays, formatDayLabelTr } from "@/lib/plan-dates";
 import {
   commitmentDateLabel,
   commitmentTypeLabel,
@@ -34,11 +32,10 @@ export type PlanningWeek = {
 
 type ViewMode = "hafta" | "pano";
 
-const COLUMNS: { status: StudyStepStatus; label: string }[] = [
-  { status: "TODO", label: "Yapılacak" },
-  { status: "IN_PROGRESS", label: "Yapıyorum" },
-  { status: "DONE", label: "Tamamladım" },
-];
+/** Prefer tabs when the planning content column itself is too narrow for 3 cards. */
+const BOARD_THREE_COL_MIN = 900;
+
+const COLUMNS: StudyStepStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
 function weekHref(weekStart: string, view: ViewMode) {
   const params = new URLSearchParams({ view });
@@ -68,10 +65,11 @@ export function PlanningViewTabs({
             href={weekHref(weekStart, id)}
             role="tab"
             aria-selected={selected}
-            className="inline-flex min-h-12 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
+            className="inline-flex min-h-12 items-center justify-center rounded-2xl px-4 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{
               border: selected ? "2px solid var(--accent)" : "1px solid var(--line)",
               background: selected ? "var(--accent-soft)" : "white",
+              outlineColor: "var(--accent)",
             }}
           >
             {label}
@@ -116,24 +114,24 @@ export function WeekNav({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="min-h-11 rounded-2xl border px-3 text-sm font-semibold"
-          style={{ borderColor: "var(--line)" }}
+          className="min-h-11 rounded-2xl border px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{ borderColor: "var(--line)", outlineColor: "var(--accent)" }}
           onClick={() => go(-1)}
         >
           Önceki
         </button>
         <button
           type="button"
-          className="min-h-11 rounded-2xl border px-3 text-sm font-semibold"
-          style={{ borderColor: "var(--line)" }}
+          className="min-h-11 rounded-2xl border px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{ borderColor: "var(--line)", outlineColor: "var(--accent)" }}
           onClick={goThisWeek}
         >
           Bu hafta
         </button>
         <button
           type="button"
-          className="min-h-11 rounded-2xl border px-3 text-sm font-semibold"
-          style={{ borderColor: "var(--line)" }}
+          className="min-h-11 rounded-2xl border px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{ borderColor: "var(--line)", outlineColor: "var(--accent)" }}
           onClick={() => go(1)}
         >
           Sonraki
@@ -170,11 +168,13 @@ async function patchStatus(
 function StepCard({
   step,
   readOnly,
+  today,
   onChanged,
 }: {
   step: StudyStepView;
   readOnly?: boolean;
-  onChanged: (next: StudyStepView) => void;
+  today: string;
+  onChanged: (next: StudyStepView, opts?: { offerReflection?: boolean }) => void;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string>();
@@ -190,6 +190,12 @@ function StepCard({
   }, [step]);
 
   async function setStatus(status: StudyStepStatus) {
+    if (status === "TODO" && snapshot.completionReflection) {
+      const ok = window.confirm(
+        "Yapılacaklara alınca tamamlanma notu da silinir. Devam etmek istiyor musun?",
+      );
+      if (!ok) return;
+    }
     setPending(true);
     setError(undefined);
     const previous = snapshot;
@@ -202,7 +208,9 @@ function StepCard({
       return;
     }
     setSnapshot(result.studyStep);
-    onChanged(result.studyStep);
+    onChanged(result.studyStep, {
+      offerReflection: status === "DONE" && previous.status !== "DONE",
+    });
     setPending(false);
     router.refresh();
   }
@@ -280,23 +288,34 @@ function StepCard({
     }
   }
 
+  const detailHref = readOnly
+    ? `/veli/plan/adim/${snapshot.id}`
+    : `/cocuk/plan/adim/${snapshot.id}`;
+
   if (readOnly) {
     return (
-      <article
-        className="rounded-2xl border px-3 py-3"
-        style={{ borderColor: "var(--line)", background: "white" }}
+      <Link
+        href={detailHref}
+        className="block rounded-2xl border px-3 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{
+          borderColor: "var(--line)",
+          background: "white",
+          outlineColor: "var(--accent)",
+        }}
       >
-        <p className="text-xs font-semibold" style={{ color: "var(--muted)" }}>
-          {studyStepStatusLabel(snapshot.status)}
-        </p>
-        <p className="font-medium">{snapshot.title}</p>
+        <StudyStatusBadge
+          status={snapshot.status}
+          plannedDate={snapshot.plannedDate}
+          today={today}
+        />
+        <p className="mt-2 font-medium">{snapshot.title}</p>
         <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
           {studyStepMeta(snapshot)}
           {snapshot.relatedDeadline
             ? ` · son: ${formatDayLabelTr(snapshot.relatedDeadline)}`
             : ""}
         </p>
-      </article>
+      </Link>
     );
   }
 
@@ -306,13 +325,15 @@ function StepCard({
       style={{ borderColor: "var(--line)", background: "white" }}
     >
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="font-medium">{snapshot.title}</p>
+        <div className="min-w-0">
+          <StudyStatusBadge
+            status={snapshot.status}
+            plannedDate={snapshot.plannedDate}
+            today={today}
+          />
+          <p className="mt-2 font-medium">{snapshot.title}</p>
           <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
-            {snapshot.plannedDate
-              ? formatDayLabelTr(snapshot.plannedDate)
-              : "Günü seçilmedi"}
-            {snapshot.estimatedMinutes ? ` · ~${snapshot.estimatedMinutes} dk` : ""}
+            {studyStepMeta(snapshot)}
           </p>
           {snapshot.relatedCommitmentTitle ? (
             <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
@@ -323,11 +344,11 @@ function StepCard({
             </p>
           ) : null}
         </div>
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             type="button"
-            className="min-h-11 min-w-11 rounded-2xl border px-2 text-sm font-semibold"
-            style={{ borderColor: "var(--line)" }}
+            className="min-h-11 min-w-11 rounded-2xl border px-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{ borderColor: "var(--line)", outlineColor: "var(--accent)" }}
             aria-expanded={menuOpen}
             aria-haspopup="menu"
             onClick={() => setMenuOpen((v) => !v)}
@@ -341,7 +362,7 @@ function StepCard({
               style={{ borderColor: "var(--line)" }}
             >
               <Link
-                href={`/cocuk/plan/adim/${snapshot.id}`}
+                href={detailHref}
                 className="block min-h-11 px-2 py-2 text-sm font-semibold"
                 role="menuitem"
               >
@@ -412,6 +433,7 @@ function StepCard({
           </Button>
         </div>
       )}
+
       <FieldError message={error} />
     </article>
   );
@@ -425,28 +447,54 @@ export function BoardPlanView({
   readOnly?: boolean;
 }) {
   const router = useRouter();
+  const boardRef = useRef<HTMLDivElement>(null);
   const weekSteps = useMemo(
     () => week.days.flatMap((d) => d.studySteps),
     [week.days],
   );
   const [steps, setSteps] = useState(weekSteps);
   const [tab, setTab] = useState<StudyStepStatus>("TODO");
+  const [useTabs, setUseTabs] = useState(true);
+  const [reflectionStepId, setReflectionStepId] = useState<string | null>(null);
 
   useEffect(() => {
     setSteps(weekSteps);
   }, [weekSteps]);
 
-  function onChanged(next: StudyStepView) {
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      setUseTabs(width < BOARD_THREE_COL_MIN);
+    });
+    ro.observe(el);
+    setUseTabs(el.clientWidth < BOARD_THREE_COL_MIN);
+    return () => ro.disconnect();
+  }, []);
+
+  function onChanged(next: StudyStepView, opts?: { offerReflection?: boolean }) {
     setSteps((prev) => {
       const exists = prev.some((s) => s.id === next.id);
       if (exists) return prev.map((s) => (s.id === next.id ? next : s));
       return prev;
     });
+    if (opts?.offerReflection && next.status === "DONE") {
+      setReflectionStepId(next.id);
+      setTab("DONE");
+    }
+    if (next.status !== "DONE" && reflectionStepId === next.id) {
+      setReflectionStepId(null);
+    }
   }
+
+  const reflectionStep = reflectionStepId
+    ? steps.find((s) => s.id === reflectionStepId)
+    : undefined;
 
   const byStatus = (status: StudyStepStatus) => steps.filter((s) => s.status === status);
 
-  const upcomingCommitments = week.days.flatMap((d) =>
+  const weekCommitments = week.days.flatMap((d) =>
     d.commitments
       .filter((c) => !c.completedAt)
       .map((c) => ({ ...c, day: d.date })),
@@ -468,7 +516,12 @@ export function BoardPlanView({
           <ul className="space-y-2">
             {list.map((s) => (
               <li key={s.id}>
-                <StepCard step={s} readOnly={readOnly} onChanged={onChanged} />
+                <StepCard
+                  step={s}
+                  readOnly={readOnly}
+                  today={week.today}
+                  onChanged={onChanged}
+                />
               </li>
             ))}
           </ul>
@@ -478,70 +531,91 @@ export function BoardPlanView({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" ref={boardRef}>
       <WeekNav week={week} view="pano" readOnly={readOnly} />
 
-      {upcomingCommitments.length > 0 ? (
+      {weekCommitments.length > 0 ? (
         <section>
-          <h3 className="text-sm font-semibold">Yaklaşan ödev / sınav / etkinlik</h3>
+          <h3 className="text-sm font-semibold">
+            Bu haftanın sınavları ve etkinlikleri
+          </h3>
           <ul className="mt-2 space-y-2">
-            {upcomingCommitments.map((c) => (
-              <li
-                key={c.id}
-                className="rounded-2xl border px-3 py-3 text-sm"
-                style={{
-                  borderColor: "var(--line)",
-                  background: "rgba(15, 118, 110, 0.06)",
-                }}
-              >
-                <span className="font-semibold">{commitmentTypeLabel(c.type)}</span>
-                {" · "}
-                {c.title}
-                <span className="mt-1 block" style={{ color: "var(--muted)" }}>
-                  {formatLongDateTr(c.day)} · {commitmentDateLabel(c)}
-                </span>
-              </li>
-            ))}
+            {weekCommitments.map((c) => {
+              const href = readOnly
+                ? `/veli/plan/is/${c.id}`
+                : `/cocuk/plan/is/${c.id}`;
+              return (
+                <li key={c.id}>
+                  <Link
+                    href={href}
+                    className="block rounded-2xl border px-3 py-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{
+                      borderColor: "var(--line)",
+                      background: "rgba(15, 118, 110, 0.06)",
+                      outlineColor: "var(--accent)",
+                    }}
+                  >
+                    <span className="font-semibold">{commitmentTypeLabel(c.type)}</span>
+                    {" · "}
+                    {c.title}
+                    <span className="mt-1 block" style={{ color: "var(--muted)" }}>
+                      {commitmentDateLabel(c)}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}
 
-      <div className="hidden gap-4 md:grid md:grid-cols-3">
-        {COLUMNS.map((col) => (
-          <div key={col.status}>{renderColumn(col.status)}</div>
-        ))}
-      </div>
+      {!useTabs ? (
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+          {COLUMNS.map((status) => (
+            <div key={status}>{renderColumn(status)}</div>
+          ))}
+        </div>
+      ) : (
+        <div>
+          <div className="grid grid-cols-3 gap-1" role="tablist" aria-label="Pano sütunları">
+            {COLUMNS.map((status) => {
+              const count = byStatus(status).length;
+              const selected = tab === status;
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  className="min-h-12 rounded-2xl px-2 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{
+                    border: selected ? "2px solid var(--accent)" : "1px solid var(--line)",
+                    background: selected ? "var(--accent-soft)" : "white",
+                    outlineColor: "var(--accent)",
+                  }}
+                  onClick={() => setTab(status)}
+                >
+                  {studyStepStatusLabel(status)}
+                  <span className="mt-1 block" style={{ color: "var(--muted)" }}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-4" role="tabpanel">
+            {renderColumn(tab)}
+          </div>
+        </div>
+      )}
 
-      <div className="md:hidden">
-        <div className="grid grid-cols-3 gap-1" role="tablist" aria-label="Pano sütunları">
-          {COLUMNS.map((col) => {
-            const count = byStatus(col.status).length;
-            const selected = tab === col.status;
-            return (
-              <button
-                key={col.status}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                className="min-h-12 rounded-2xl px-2 text-xs font-semibold"
-                style={{
-                  border: selected ? "2px solid var(--accent)" : "1px solid var(--line)",
-                  background: selected ? "var(--accent-soft)" : "white",
-                }}
-                onClick={() => setTab(col.status)}
-              >
-                {col.label}
-                <span className="mt-1 block" style={{ color: "var(--muted)" }}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="mt-4" role="tabpanel">
-          {renderColumn(tab)}
-        </div>
-      </div>
+      {reflectionStep && !readOnly ? (
+        <CompletionReflectionPrompt
+          step={reflectionStep}
+          onUpdated={(next) => onChanged(next)}
+          onDismiss={() => setReflectionStepId(null)}
+        />
+      ) : null}
 
       {steps.length === 0 ? (
         <p className="text-sm" style={{ color: "var(--muted)" }}>
@@ -566,6 +640,7 @@ export function BoardPlanView({
                 <StepCard
                   step={s}
                   readOnly={readOnly}
+                  today={week.today}
                   onChanged={() => router.refresh()}
                 />
               </li>
@@ -576,13 +651,14 @@ export function BoardPlanView({
 
       {week.missed.length > 0 ? (
         <section>
-          <h3 className="text-sm font-semibold">Önceki günlerden kalanlar</h3>
+          <h3 className="text-sm font-semibold">Kaçırılan açık adımlar</h3>
           <ul className="mt-2 space-y-2">
             {week.missed.map((s) => (
               <li key={s.id}>
                 <StepCard
                   step={s}
                   readOnly={readOnly}
+                  today={week.today}
                   onChanged={() => router.refresh()}
                 />
               </li>

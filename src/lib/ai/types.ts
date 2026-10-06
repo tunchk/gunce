@@ -35,6 +35,8 @@ export type SummarizationProvider = {
 export type ParentGuidanceInput = {
   parentMessage: string;
   supportRequest: string;
+  /** M11: full saved narrative for GUARDIAN_VISIBLE entries (never legacy private text). */
+  narrativeText?: string;
 };
 
 export type ParentGuidanceResult = {

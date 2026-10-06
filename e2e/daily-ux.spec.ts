@@ -10,7 +10,9 @@ import {
   updateSharingDraft,
   publishShare,
   prisma,
+  markEntryLegacyPrivate,
 } from "./fixtures";
+
 
 /**
  * Milestone 8 — daily UX (presentation). Simulated browser coverage;
@@ -22,7 +24,7 @@ test.beforeEach(async () => {
 
 test.use({ viewport: { width: 360, height: 740 } });
 
-test("child nav, journal resume, and private save stay private", async ({ browser }) => {
+test("child nav, journal resume, and guardian-visible save", async ({ browser }) => {
   const parent = await createParent({ email: `e2e_ux_child_${Date.now()}@example.com` });
   const child = await onboardParentWithChild(parent.user.id);
   const childCookie = await pairChildAndGetCookie(parent.user.id, child.id);
@@ -58,29 +60,25 @@ test("child nav, journal resume, and private save stay private", async ({ browse
 
   await nav.getByRole("link", { name: "Günlüğüm" }).click();
   await expect(page.getByRole("heading", { name: "Günlüğüm" })).toBeVisible();
-  await expect(page.getByText("Bende kalacak · özel")).toBeVisible();
+  await expect(page.getByText("Velilerin görebilir", { exact: true })).toBeVisible();
   await page.goto(`/cocuk/gunluk/${entry.id}`);
   await expect(page.locator("#journal-body")).toBeVisible();
   await expect(page.locator("#journal-body")).toHaveValue(/parkta oynadım/);
   await expect(page.getByRole("heading", { name: "1. Anlat / yaz" })).toBeVisible();
-  await expect(page.getByText("Bende kalacak · özel")).toBeVisible();
+  await expect(
+    page.getByText("Buraya kaydettiklerini velilerin görebilir.", { exact: true }),
+  ).toBeVisible();
 
   await page.locator("#journal-body").fill("Özel günlük: parkta oynadım ve dondurma yedim.");
-  await page.getByRole("button", { name: "Kaydet (bende kalsın)" }).click();
-  await expect(page.getByText("Kaydedildi")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Bitirdim" }).click();
+  await expect(page.getByText(/Kaydedildi/)).toBeVisible({ timeout: 10_000 });
 
   const parentCookie = await signInAndGetCookie(parent.email, parent.password);
   const parentCtx = await browser.newContext();
   await parentCtx.addCookies(parseCookieHeader(parentCookie));
   const parentPage = await parentCtx.newPage();
-  await parentPage.goto("/veli/ana");
-  await expect(parentPage.getByText("parkta oynadım")).toHaveCount(0);
-  await expect(parentPage.getByText("dondurma")).toHaveCount(0);
-
-  const fresh = await prisma.publishedShare.findFirst({
-    where: { entryId: entry.id, withdrawnAt: null },
-  });
-  expect(fresh).toBeNull();
+  await parentPage.goto(`/veli/gunluk/${entry.id}`);
+  await expect(parentPage.getByText(/dondurma yedim/)).toBeVisible();
 
   await ctx.close();
   await parentCtx.close();
@@ -116,6 +114,8 @@ test("home next-step matches Planım views; parent opens shares from home", asyn
   });
   await page.getByLabel("Planlanan gün (isteğe bağlı)").fill(today);
   await page.getByRole("button", { name: "Kaydet" }).click();
+  await expect(page.getByText(/Kaydedildi/)).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Haftalık plana git" }).click();
   await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
 
   await page.goto("/cocuk/ana");
@@ -132,6 +132,7 @@ test("home next-step matches Planım views; parent opens shares from home", asyn
     childUserId,
     body: "ÖZEL destekli gün",
   });
+  await markEntryLegacyPrivate(entry.id);
   const draft = await updateSharingDraft({
     childUserId,
     entryId: entry.id,
@@ -160,6 +161,7 @@ test("home next-step matches Planım views; parent opens shares from home", asyn
     childUserId,
     body: "ÖZEL ikinci",
   });
+  await markEntryLegacyPrivate(entry2.id);
   const draft2 = await updateSharingDraft({
     childUserId,
     entryId: entry2.id,

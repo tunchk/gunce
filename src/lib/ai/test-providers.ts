@@ -65,20 +65,22 @@ export function createTestParentGuidanceProvider(): ParentGuidanceProvider {
     name: "test-parent-guidance",
     isConfigured: () => true,
     async generate(input) {
+      const narrative = input.narrativeText?.trim() ?? "";
       const message = input.parentMessage.trim();
       const support = input.supportRequest.trim();
-      if (!message && !support) {
+      if (!message && !support && !narrative) {
         throw new ProviderError("Paylaşılan içerik yok.", "INVALID_OUTPUT");
       }
-      if (`${message}\n${support}`.includes("__FAIL_GUIDANCE__")) {
+      if (`${message}\n${support}\n${narrative}`.includes("__FAIL_GUIDANCE__")) {
         throw new ProviderError("Yaklaşım önerisi alınamadı.", "PROVIDER_FAILURE");
       }
+      const source = narrative || message;
       const limited =
-        message.length < 40 || /zorlandığım bir durum/i.test(message);
+        source.length < 40 || /zorlandığım bir durum/i.test(source);
       return {
         conversationOpener: limited
           ? "İstersen seni dinleyebilirim. Anlatmak ister misin?"
-          : `Hangi adımda takıldığını bana göstermek ister misin? (${message.slice(0, 48)})`,
+          : `Hangi adımda takıldığını bana göstermek ister misin? (${source.slice(0, 48)})`,
         supportAction: limited
           ? "Birlikte sakin bir anda konuşmak için kısa bir zaman ayırabilirsiniz."
           : "İsterse birlikte tek bir örnek çözmek için kısa bir zaman ayırabilirsiniz.",

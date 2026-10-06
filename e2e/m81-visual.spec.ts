@@ -12,7 +12,9 @@ import {
   updateSharingDraft,
   publishShare,
   prisma,
+  markEntryLegacyPrivate,
 } from "./fixtures";
+
 
 /**
  * Milestone 8.1 — authenticated visual inspection (screenshots).
@@ -48,6 +50,7 @@ test("authenticated layouts at 360px and desktop (screenshots)", async ({ browse
   const parentCookie = await signInAndGetCookie(parent.email, parent.password);
 
   const msgEntry = await createJournalEntry({ childUserId, body: "ÖZEL mesajlı" });
+  await markEntryLegacyPrivate(msgEntry.id);
   const msgDraft = await updateSharingDraft({
     childUserId,
     entryId: msgEntry.id,
@@ -62,6 +65,7 @@ test("authenticated layouts at 360px and desktop (screenshots)", async ({ browse
   });
 
   const supportEntry = await createJournalEntry({ childUserId, body: "ÖZEL destek" });
+  await markEntryLegacyPrivate(supportEntry.id);
   const supportDraft = await updateSharingDraft({
     childUserId,
     entryId: supportEntry.id,
@@ -78,14 +82,84 @@ test("authenticated layouts at 360px and desktop (screenshots)", async ({ browse
   const goal = await prisma.planGoal.create({
     data: {
       childId: child.id,
-      title: "Görsel hedef başlığı",
+      title: "Görsel hedef başlığı — uzun Türkçe etiket",
       description: "Küçük adımlarla ilerlemek",
       status: "ACTIVE",
     },
   });
 
+  const todayIso = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayIso = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(yesterday);
+  const pastEvent = new Date();
+  pastEvent.setDate(pastEvent.getDate() - 2);
+  const pastEventIso = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(pastEvent);
+
+  await prisma.planCommitment.create({
+    data: {
+      childId: child.id,
+      type: "COURSE",
+      title: "Geçmiş piyano dinletisi — uzun etkinlik adı",
+      subject: "Müzik",
+      eventDate: new Date(`${pastEventIso}T00:00:00.000Z`),
+    },
+  });
+  await prisma.planStudyStep.createMany({
+    data: [
+      {
+        childId: child.id,
+        title: "Yapılacak: uzun matematik problem seti tekrarı",
+        plannedDate: new Date(`${todayIso}T00:00:00.000Z`),
+        status: "TODO",
+        estimatedMinutes: 25,
+        relatedGoalId: goal.id,
+      },
+      {
+        childId: child.id,
+        title: "Yapıyorum: İngilizce kelime kartları çalışması",
+        plannedDate: new Date(`${todayIso}T00:00:00.000Z`),
+        status: "IN_PROGRESS",
+        estimatedMinutes: 15,
+        relatedGoalId: goal.id,
+      },
+      {
+        childId: child.id,
+        title: "Tamamlandı: fen defteri düzenleme adımı",
+        plannedDate: new Date(`${todayIso}T00:00:00.000Z`),
+        status: "DONE",
+        completedAt: new Date(),
+        estimatedMinutes: 10,
+        relatedGoalId: goal.id,
+      },
+      {
+        childId: child.id,
+        title: "Gecikmiş açık adım — tarih uyarısı beklenir",
+        plannedDate: new Date(`${yesterdayIso}T00:00:00.000Z`),
+        status: "TODO",
+        estimatedMinutes: 40,
+      },
+    ],
+  });
+
   for (const [label, width, height] of [
     ["mobile", 360, 740],
+    ["mid", 820, 900],
     ["desktop", 1280, 900],
   ] as const) {
     const childCtx = await browser.newContext({ viewport: { width, height } });
@@ -107,10 +181,14 @@ test("authenticated layouts at 360px and desktop (screenshots)", async ({ browse
     );
     await page.getByLabel("Planlanan gün (isteğe bağlı)").fill(today);
     await page.getByRole("button", { name: "Kaydet" }).click();
+    await expect(page.getByText(/Kaydedildi/)).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Haftalık plana git" }).click();
     await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
 
     await page.goto("/cocuk/ana");
-    await expect(page.getByText("Görsel sıradaki adım")).toBeVisible();
+    await expect(
+      page.getByText(/Görsel sıradaki adım|Yapıyorum: İngilizce|Yapılacak: uzun/),
+    ).toBeVisible();
     await assertNoOverflow(page);
     await page.screenshot({
       path: path.join(outDir, `${label}-child-home.png`),
@@ -123,7 +201,6 @@ test("authenticated layouts at 360px and desktop (screenshots)", async ({ browse
 
     await page.goto(`/cocuk/gunluk/${entry.id}`);
     await expect(page.locator("#journal-body")).toContainText("kesirleri");
-    await expect(page.getByText("Kaydedildi").or(page.getByText("Bende kalacak"))).toBeVisible();
     await assertNoOverflow(page);
     await page.screenshot({
       path: path.join(outDir, `${label}-journal-editor.png`),
@@ -146,14 +223,22 @@ test("authenticated layouts at 360px and desktop (screenshots)", async ({ browse
     });
 
     await page.goto("/cocuk/haftam");
-    await expect(page.getByText("Görsel sıradaki adım").first()).toBeVisible();
+    await expect(
+      page.getByText(/Görsel sıradaki adım|Yapılacak: uzun|Yapıyorum: İngilizce/).first(),
+    ).toBeVisible();
     await assertNoOverflow(page);
     await page.screenshot({
       path: path.join(outDir, `${label}-plan-week.png`),
       fullPage: true,
     });
     await page.getByRole("tab", { name: "Pano" }).click();
-    await expect(page.getByText("Görsel sıradaki adım").first()).toBeVisible();
+    await expect(
+      page.getByText(/Yapılacak: uzun|Yapıyorum: İngilizce|Tamamlandı: fen|Gecikmiş açık/).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Bu haftanın sınavları ve etkinlikleri/ }),
+    ).toBeVisible();
+    await expect(page.getByText(/Geçmiş piyano/).first()).toBeVisible();
     await assertNoOverflow(page);
     await page.screenshot({
       path: path.join(outDir, `${label}-plan-board.png`),
@@ -161,7 +246,9 @@ test("authenticated layouts at 360px and desktop (screenshots)", async ({ browse
     });
 
     await page.goto(`/cocuk/hedefler/${goal.id}`);
-    await expect(page.getByRole("heading", { name: "Görsel hedef başlığı" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Görsel hedef başlığı/ }),
+    ).toBeVisible();
     await assertNoOverflow(page);
     await page.screenshot({
       path: path.join(outDir, `${label}-goal-detail.png`),

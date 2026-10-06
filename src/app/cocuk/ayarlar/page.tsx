@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions";
+import { NotificationBell } from "@/components/notification-bell";
 import { Button, Panel, Shell } from "@/components/ui";
 import { getAppSession, getChildProfileForUser } from "@/lib/session";
 
@@ -13,10 +14,21 @@ export default async function ChildSettingsPage() {
   return (
     <Shell
       title="Ayarlar"
-      subtitle="Hatırlatmalar ve oturum. Ana akışı sade tutmak için buradalar."
+      subtitle="Hatırlatmalar, bildirimler ve oturum. Ana akışı sade tutmak için buradalar."
       withChildNav
+      headerAction={<NotificationBell href="/cocuk/bildirimler" />}
     >
       <div className="space-y-4">
+        <Panel>
+          <h2 className="text-lg font-semibold">Bildirimler</h2>
+          <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+            Hatırlatma bildirimlerini burada açabilirsin. Veliden mesaj veya görev gelmez.
+          </p>
+          <Link href="/cocuk/bildirimler" className="mt-4 block">
+            <Button variant="secondary">Bildirim merkezini aç</Button>
+          </Link>
+        </Panel>
+
         <Panel>
           <h2 className="text-lg font-semibold">Hatırlatmalar</h2>
           <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>

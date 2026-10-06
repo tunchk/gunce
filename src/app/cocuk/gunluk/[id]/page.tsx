@@ -28,10 +28,15 @@ export default async function JournalEntryPage({ params }: Props) {
   const prompt = PROMPT_OPTIONS.find((p) => p.key === entry.promptKey);
   const features = getAiFeatureStatus();
 
+  const subtitle =
+    entry.visibility === "GUARDIAN_VISIBLE"
+      ? "Buraya kaydettiklerini velilerin görebilir. Planına eklemek isteğe bağlıdır."
+      : "Eski kayıt: özel metin sende kalır. Paylaşmak ve plana eklemek isteğe bağlıdır.";
+
   return (
     <Shell
       title={prompt?.label ?? "Günlük yazısı"}
-      subtitle="Önce anlat veya yaz. Paylaşmak ve plana eklemek isteğe bağlıdır."
+      subtitle={subtitle}
       withChildNav
       headerAction={<ChildSettingsLink />}
     >

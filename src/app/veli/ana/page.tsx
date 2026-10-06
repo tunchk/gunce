@@ -3,10 +3,16 @@ import { redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions";
 import { ChildSelector } from "@/components/child-selector";
 import { EmailVerificationReminder } from "@/components/email-verification-reminder";
+import { NotificationBell } from "@/components/notification-bell";
 import { ParentSharedSections } from "@/components/parent-shared-sections";
 import { Button, Panel, Shell } from "@/components/ui";
 import { avatarEmoji } from "@/lib/constants";
-import { listParentSharedContent } from "@/lib/journal";
+import {
+  excerptSharedText,
+  formatDiaryDate,
+  listParentSharedContent,
+  listParentVisibleEntries,
+} from "@/lib/journal";
 import { getParentWeekPlan } from "@/lib/plan";
 import { getParentGoals } from "@/lib/goal";
 import { formatDayLabelTr } from "@/lib/plan-dates";
@@ -24,14 +30,21 @@ export default async function ParentHomePage() {
 
   const child = ctx.child;
 
-  const [shared, plan, goalsData] = await Promise.all([
+  const [shared, visible, plan, goalsData] = await Promise.all([
     listParentSharedContent(session.user.id),
+    listParentVisibleEntries(session.user.id, child.id),
     getParentWeekPlan(session.user.id),
     getParentGoals(session.user.id),
   ]);
 
   const messages = shared.messages.filter((m) => m.childId === child.id);
   const supportRequests = shared.supportRequests.filter((m) => m.childId === child.id);
+  // Avoid duplicate cards when a legacy share also exists for the same entry.
+  const legacyEntryIds = new Set([
+    ...messages.map((m) => m.entryId),
+    ...supportRequests.map((m) => m.entryId),
+  ]);
+  const visibleOnly = visible.filter((v) => !legacyEntryIds.has(v.entryId));
 
   const childPlan = plan.children.find((c) => c.childId === child.id);
   const upcoming: { label: string; title: string; date: string }[] = [];
@@ -55,16 +68,19 @@ export default async function ParentHomePage() {
   return (
     <Shell
       title={`Merhaba, ${session.user.name}`}
-      subtitle="Yalnızca seninle paylaşılan içerikler ve bu çocuğun planı burada görünür."
+      subtitle="Çocuğunun kaydettiği yeni günlükler ve onaylı eski paylaşımlar burada."
       wide
       headerAction={
-        <Link
-          href="/veli/ayarlar"
-          className="inline-flex min-h-11 items-center justify-center rounded-2xl px-3 text-sm font-semibold"
-          style={{ border: "1px solid var(--line)" }}
-        >
-          Ayarlar
-        </Link>
+        <div className="flex items-center gap-2">
+          <NotificationBell href="/veli/bildirimler" />
+          <Link
+            href="/veli/ayarlar"
+            className="inline-flex min-h-11 items-center justify-center rounded-2xl px-3 text-sm font-semibold"
+            style={{ border: "1px solid var(--line)" }}
+          >
+            Ayarlar
+          </Link>
+        </div>
       }
     >
       <div className="space-y-4">
@@ -93,6 +109,42 @@ export default async function ParentHomePage() {
           </div>
         </Panel>
 
+        <Panel>
+          <h2 className="text-lg font-semibold">Son günlükler</h2>
+          <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+            Yeni modelde kaydedilen anlatımlar. Özel eski kayıtlar burada görünmez.
+          </p>
+          {visibleOnly.length === 0 ? (
+            <p className="mt-3 text-sm" style={{ color: "var(--muted)" }}>
+              Henüz görünen yeni günlük yok.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-3">
+              {visibleOnly.slice(0, 5).map((item) => (
+                <li
+                  key={item.entryId}
+                  className="rounded-2xl border p-4"
+                  style={{ borderColor: "var(--line)" }}
+                >
+                  <p className="text-xs" style={{ color: "var(--muted)" }}>
+                    {formatDiaryDate(new Date(`${item.diaryDate}T00:00:00.000Z`))}
+                  </p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
+                    {excerptSharedText(item.body)}
+                  </p>
+                  <Link
+                    href={`/veli/gunluk/${item.entryId}`}
+                    className="mt-3 inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
+                    style={{ background: "var(--accent-soft)" }}
+                  >
+                    Detayı gör
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
         <ParentSharedSections
           messages={messages}
           supportRequests={supportRequests}
@@ -110,7 +162,7 @@ export default async function ParentHomePage() {
           ) : null}
           {upcoming.length === 0 ? (
             <p className="mt-3 text-sm" style={{ color: "var(--muted)" }}>
-              Bu hafta için yaklaşan ödev, sınav veya etkinlik yok.
+              Bu hafta için listelenecek ödev, sınav veya etkinlik yok.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">

@@ -25,7 +25,7 @@ export default async function ParentPlanPage({
     <Shell
       title="Haftanın planı"
       subtitle="Çocuğunun eklediği planı görebilirsin; düzenleme çocuğa aittir."
-      wide
+      planWide
     >
       <div className="space-y-4">
         {!childPlan ? (

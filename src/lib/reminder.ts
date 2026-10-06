@@ -645,19 +645,6 @@ export async function processDueReminders(input?: {
       where: { childId: occ.childId, revokedAt: null },
     });
 
-    if (subscriptions.length === 0) {
-      await prisma.reminderOccurrence.updateMany({
-        where: { id: occ.id, claimToken, status: "CLAIMED" },
-        data: {
-          status: "SKIPPED",
-          lastError: "no-device",
-          claimToken: null,
-        },
-      });
-      result.skipped += 1;
-      continue;
-    }
-
     const capped = await tryIncrementDailyCap(occ.childId, check.localDate);
     if (!capped) {
       await prisma.reminderOccurrence.updateMany({
@@ -668,8 +655,31 @@ export async function processDueReminders(input?: {
       continue;
     }
 
+    // In-app notification does not require push / VAPID.
+    const childUser = await prisma.childProfile.findUnique({
+      where: { id: occ.childId },
+      select: { userId: true },
+    });
+    if (childUser?.userId) {
+      const { ensureReminderInAppNotification } = await import(
+        "@/lib/notifications"
+      );
+      await ensureReminderInAppNotification({
+        occurrenceId: occ.id,
+        childUserId: childUser.userId,
+        childId: occ.childId,
+        kind: occ.kind === "STUDY_STEP" ? "STUDY_STEP" : "JOURNAL",
+        href: check.copy.url,
+      });
+    }
+
     let anyAccepted = false;
     let hardFail = false;
+    // Count in-app as delivered even without devices.
+    if (childUser?.userId) {
+      anyAccepted = true;
+    }
+
     for (const sub of subscriptions) {
       const existingDelivery = await prisma.reminderDelivery.findUnique({
         where: {

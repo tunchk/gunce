@@ -42,6 +42,8 @@ test("create step → Pano Başla → Tamamladım → Hafta agrees", async ({ br
   await page.getByLabel("Planlanan gün (isteğe bağlı)").fill(today);
   await page.getByLabel("Tahmini süre (dk, isteğe bağlı)").fill("12");
   await page.getByRole("button", { name: "Kaydet" }).click();
+  await expect(page.getByText(/Kaydedildi/)).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Haftalık plana git" }).click();
   await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("tab", { name: "Pano" }).click();
@@ -50,17 +52,22 @@ test("create step → Pano Başla → Tamamladım → Hafta agrees", async ({ br
     "true",
   );
 
-  const mobilePanel = page.locator(".md\\:hidden");
-  await expect(mobilePanel.getByText("Pano deneme adımı").first()).toBeVisible();
+  const statusTabs = page.getByRole("tablist", { name: "Pano sütunları" });
+  await expect(page.getByText("Pano deneme adımı").first()).toBeVisible();
 
-  await mobilePanel.getByRole("button", { name: "Başla" }).click();
-  await mobilePanel.getByRole("tab", { name: /Yapıyorum/ }).click();
-  await expect(mobilePanel.getByText("Pano deneme adımı").first()).toBeVisible({
+  await page.getByRole("button", { name: "Başla" }).click();
+  await statusTabs.getByRole("tab", { name: /Yapıyorum/ }).click();
+  await expect(page.getByText("Pano deneme adımı").first()).toBeVisible({
     timeout: 10_000,
   });
-  await mobilePanel.getByRole("button", { name: "Tamamladım" }).click();
-  await mobilePanel.getByRole("tab", { name: /Tamamladım/ }).click();
-  await expect(mobilePanel.getByText("Pano deneme adımı").first()).toBeVisible({
+  await page.getByRole("button", { name: "Tamamladım" }).click();
+  await expect(page.getByText("Neler yaptın?")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Şimdi geç" }).click();
+  await expect(statusTabs.getByRole("tab", { name: /Tamamlandı/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByText("Pano deneme adımı").first()).toBeVisible({
     timeout: 10_000,
   });
 
@@ -70,17 +77,15 @@ test("create step → Pano Başla → Tamamladım → Hafta agrees", async ({ br
     "true",
   );
   await expect(page.getByText("Pano deneme adımı").first()).toBeVisible();
-  await expect(page.getByText("Tamamladım").first()).toBeVisible();
+  await expect(page.getByText("Tamamlandı").first()).toBeVisible();
 
   await page.getByRole("link", { name: /Pano deneme adımı/ }).first().click();
-  await expect(page.getByText(/Durum: Tamamladım/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Tamamlandı").first()).toBeVisible({ timeout: 10_000 });
   await page.getByRole("link", { name: "Planıma dön" }).click();
 
   await page.getByRole("tab", { name: "Pano" }).click();
-  await page.locator(".md\\:hidden").getByRole("tab", { name: /Tamamladım/ }).click();
-  await expect(
-    page.locator(".md\\:hidden").getByText("Pano deneme adımı").first(),
-  ).toBeVisible();
+  await page.getByRole("tablist", { name: "Pano sütunları" }).getByRole("tab", { name: /Tamamlandı/ }).click();
+  await expect(page.getByText("Pano deneme adımı").first()).toBeVisible();
 
   await childCtx.close();
 });

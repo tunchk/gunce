@@ -1,6 +1,7 @@
 import type { PlanCommitmentType } from "@prisma/client";
 import type { CommitmentView, StudyStepStatus, StudyStepView } from "@/lib/plan";
 import { formatDayLabelTr, formatLongDateTr } from "@/lib/plan-dates";
+import { studyStepStatusLabel as sharedStatusLabel } from "@/lib/plan-status";
 
 export function commitmentTypeLabel(type: PlanCommitmentType): string {
   switch (type) {
@@ -16,16 +17,7 @@ export function commitmentTypeLabel(type: PlanCommitmentType): string {
 }
 
 export function studyStepStatusLabel(status: StudyStepStatus): string {
-  switch (status) {
-    case "TODO":
-      return "Yapılacak";
-    case "IN_PROGRESS":
-      return "Yapıyorum";
-    case "DONE":
-      return "Tamamladım";
-    default:
-      return status;
-  }
+  return sharedStatusLabel(status);
 }
 
 export function goalLifecycleLabel(status: "ACTIVE" | "ACHIEVED" | "ARCHIVED"): string {
@@ -53,9 +45,19 @@ export function commitmentDateLabel(c: CommitmentView): string {
 
 export function studyStepMeta(s: StudyStepView): string {
   const parts: string[] = [];
-  if (s.plannedDate) parts.push(formatDayLabelTr(s.plannedDate));
+  if (s.plannedDate) parts.push(`Plan: ${formatDayLabelTr(s.plannedDate)}`);
   else parts.push("Günü seçilmedi");
-  if (s.estimatedMinutes) parts.push(`~${s.estimatedMinutes} dk`);
+  if (s.status === "DONE" && s.completedAt) {
+    parts.push(
+      `Tamamlandı: ${new Date(s.completedAt).toLocaleString("tr-TR", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`,
+    );
+  }
+  if (s.estimatedMinutes) parts.push(`Tahmini ~${s.estimatedMinutes} dk`);
   if (s.relatedCommitmentTitle) parts.push(s.relatedCommitmentTitle);
   return parts.join(" · ");
 }

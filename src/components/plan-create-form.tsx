@@ -39,6 +39,11 @@ export function PlanCreateForm({
     commitmentId: string;
     title: string;
   } | null>(offerPrepAfter || null);
+  const [savedSuccess, setSavedSuccess] = useState<{
+    kind: "commitment" | "study_step";
+    id: string;
+    title: string;
+  } | null>(null);
 
   useEffect(() => {
     if (kind !== "STUDY_STEP") return;
@@ -91,8 +96,12 @@ export function PlanCreateForm({
           setPending(false);
           return;
         }
-        router.push("/cocuk/haftam");
-        router.refresh();
+        setSavedSuccess({
+          kind: "study_step",
+          id: data.studyStep!.id,
+          title: title.trim() || "Çalışma adımı",
+        });
+        setPending(false);
         return;
       }
 
@@ -130,12 +139,47 @@ export function PlanCreateForm({
         setSubject("");
         return;
       }
-      router.push("/cocuk/haftam");
-      router.refresh();
+      setSavedSuccess({
+        kind: "commitment",
+        id: data.commitment!.id,
+        title: data.commitment!.title,
+      });
+      setPending(false);
     } catch {
       setError("Bağlantı hatası. Girdiğin bilgiler duruyor.");
       setPending(false);
     }
+  }
+
+  if (savedSuccess) {
+    const href =
+      savedSuccess.kind === "study_step"
+        ? `/cocuk/plan/adim/${savedSuccess.id}`
+        : `/cocuk/plan/is/${savedSuccess.id}`;
+    return (
+      <div className="space-y-4" role="status">
+        <p className="text-base font-semibold leading-relaxed">
+          Kaydedildi: “{savedSuccess.title}”
+        </p>
+        <a
+          href={href}
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
+          style={{ background: "var(--accent)", color: "white" }}
+        >
+          Kayda git
+        </a>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            router.push("/cocuk/haftam");
+            router.refresh();
+          }}
+        >
+          Haftalık plana git
+        </Button>
+      </div>
+    );
   }
 
   if (createdOffer) {
@@ -144,6 +188,12 @@ export function PlanCreateForm({
         <p className="text-base leading-relaxed">
           “{createdOffer.title}” kaydedildi. Hazırlık adımı eklemek ister misin?
         </p>
+        <a
+          href={`/cocuk/plan/is/${createdOffer.commitmentId}`}
+          className="inline-flex min-h-11 items-center text-sm font-semibold underline"
+        >
+          Kaydı aç
+        </a>
         <Button
           type="button"
           onClick={() => {

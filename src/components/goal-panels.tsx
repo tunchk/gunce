@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, FieldError, TextField } from "@/components/ui";
+import { StudyStatusBadge } from "@/components/study-status-badge";
 import type { GoalDetailView, GoalView } from "@/lib/goal";
-import { formatDayLabelTr, formatLongDateTr } from "@/lib/plan-dates";
-import { newClientRequestId, studyStepMeta, studyStepStatusLabel, goalLifecycleLabel } from "@/lib/plan-ui";
+import { formatDayLabelTr, formatLongDateTr, calendarDateInTimeZone } from "@/lib/plan-dates";
+import { newClientRequestId, studyStepMeta, goalLifecycleLabel } from "@/lib/plan-ui";
 
 const NOTICE_KEY = "gunce-goal-parent-notice-seen";
 
@@ -480,10 +481,12 @@ export function GoalDetailEditor({
                 style={{ borderColor: "var(--line)" }}
               >
                 <Link href={`/cocuk/plan/adim/${s.id}`} className="block">
-                  <p className="text-xs font-semibold" style={{ color: "var(--muted)" }}>
-                    {studyStepStatusLabel(s.status)}
-                  </p>
-                  <p className="font-medium">{s.title}</p>
+                  <StudyStatusBadge
+                    status={s.status}
+                    plannedDate={s.plannedDate}
+                    today={calendarDateInTimeZone("Europe/Istanbul")}
+                  />
+                  <p className="mt-2 font-medium">{s.title}</p>
                   <p className="text-sm" style={{ color: "var(--muted)" }}>
                     {studyStepMeta(s)}
                   </p>

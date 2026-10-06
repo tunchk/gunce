@@ -103,8 +103,10 @@ export type ChildEntryView = {
   originalBody: string;
   acceptedSummary: string;
   status: "DRAFT" | "SAVED";
+  visibility: "LEGACY_PRIVATE" | "GUARDIAN_VISIBLE";
   revision: number;
   updatedAt: string;
+  activeGuardianCount: number;
   draft: {
     parentMessage: string;
     supportRequest: string;
@@ -127,39 +129,62 @@ export type ChildEntryView = {
     isStale: boolean;
     createdAt: string;
   };
+  /** Child-facing AI pipeline status for new-model entries (no guidance text). */
+  guardianAiStatus:
+    | "NONE"
+    | "QUEUED"
+    | "PROCESSING"
+    | "PENDING"
+    | "READY"
+    | "FAILED"
+    | "STALE"
+    | "UNAVAILABLE";
 };
 
-function toChildEntryView(entry: {
-  id: string;
-  promptKey: JournalPrompt | null;
-  diaryDate: Date;
-  body: string;
-  originalBody: string;
-  acceptedSummary: string;
-  status: "DRAFT" | "SAVED";
-  revision: number;
-  updatedAt: Date;
-  draft: { parentMessage: string; supportRequest: string; revision: number } | null;
-  published: {
-    parentMessage: string;
-    supportRequest: string;
-    publishedAt: Date;
-    withdrawnAt: Date | null;
-    sourceDraftRevision: number;
-    recipients?: Array<{
-      guardianUserId: string;
-      guardian?: { id: string; name: string };
-    }>;
-  } | null;
-  suggestions?: Array<{
+function toChildEntryView(
+  entry: {
     id: string;
-    requestId: string;
-    suggestedText: string;
-    sourceRevision: number;
-    status: "PENDING" | "ACCEPTED" | "DISCARDED" | "STALE";
-    createdAt: Date;
-  }>;
-}): ChildEntryView {
+    promptKey: JournalPrompt | null;
+    diaryDate: Date;
+    body: string;
+    originalBody: string;
+    acceptedSummary: string;
+    status: "DRAFT" | "SAVED";
+    visibility: "LEGACY_PRIVATE" | "GUARDIAN_VISIBLE";
+    revision: number;
+    updatedAt: Date;
+    draft: { parentMessage: string; supportRequest: string; revision: number } | null;
+    published: {
+      parentMessage: string;
+      supportRequest: string;
+      publishedAt: Date;
+      withdrawnAt: Date | null;
+      sourceDraftRevision: number;
+      recipients?: Array<{
+        guardianUserId: string;
+        guardian?: { id: string; name: string };
+      }>;
+    } | null;
+    suggestions?: Array<{
+      id: string;
+      requestId: string;
+      suggestedText: string;
+      sourceRevision: number;
+      status: "PENDING" | "ACCEPTED" | "DISCARDED" | "STALE";
+      createdAt: Date;
+    }>;
+  },
+  activeGuardianCount = 0,
+  guardianAiStatus:
+    | "NONE"
+    | "QUEUED"
+    | "PROCESSING"
+    | "PENDING"
+    | "READY"
+    | "FAILED"
+    | "STALE"
+    | "UNAVAILABLE" = "NONE",
+): ChildEntryView {
   const draft = entry.draft ?? {
     parentMessage: "",
     supportRequest: "",
@@ -190,8 +215,10 @@ function toChildEntryView(entry: {
     originalBody: entry.originalBody,
     acceptedSummary: entry.acceptedSummary,
     status: entry.status,
+    visibility: entry.visibility,
     revision: entry.revision,
     updatedAt: entry.updatedAt.toISOString(),
+    activeGuardianCount,
     draft: {
       parentMessage: draft.parentMessage,
       supportRequest: draft.supportRequest,
@@ -221,7 +248,37 @@ function toChildEntryView(entry: {
           createdAt: latest.createdAt.toISOString(),
         }
       : null,
+    guardianAiStatus,
   };
+}
+
+async function countActiveGuardians(childId: string) {
+  return prisma.childGuardianAccess.count({
+    where: { childId, revokedAt: null },
+  });
+}
+
+async function resolveGuardianAiStatus(
+  entry: { id: string; visibility: string; revision: number; body: string },
+): Promise<ChildEntryView["guardianAiStatus"]> {
+  if (entry.visibility !== "GUARDIAN_VISIBLE" || !entry.body.trim()) {
+    return "NONE";
+  }
+  const { getGuardianAiForEntry } = await import("@/lib/journal-ai");
+  const ai = await getGuardianAiForEntry(entry.id, entry.revision);
+  if (ai.status === "QUEUED") return "QUEUED";
+  if (ai.status === "PROCESSING") return "PROCESSING";
+  return ai.status;
+}
+
+async function toOwnedEntryView(entry: Parameters<typeof toChildEntryView>[0] & {
+  childId: string;
+}) {
+  const [n, guardianAiStatus] = await Promise.all([
+    countActiveGuardians(entry.childId),
+    resolveGuardianAiStatus(entry),
+  ]);
+  return toChildEntryView(entry, n, guardianAiStatus);
 }
 
 export async function listChildEntries(childUserId: string) {
@@ -231,12 +288,13 @@ export async function listChildEntries(childUserId: string) {
     include: entryInclude,
     orderBy: [{ diaryDate: "desc" }, { updatedAt: "desc" }],
   });
-  return entries.map(toChildEntryView);
+  const n = await countActiveGuardians(child.id);
+  return entries.map((e) => toChildEntryView(e, n, "NONE"));
 }
 
 export async function getChildEntry(childUserId: string, entryId: string) {
   const { entry } = await requireOwnedEntry(childUserId, entryId);
-  return toChildEntryView(entry);
+  return toOwnedEntryView(entry);
 }
 
 export async function createJournalEntry(input: {
@@ -257,31 +315,51 @@ export async function createJournalEntry(input: {
       if (existing.childId !== child.id) {
         throw new JournalError("Bu istek başka bir kayda ait.", "CONFLICT");
       }
-      return toChildEntryView(existing);
+      return toOwnedEntryView(existing);
     }
   }
 
   const body = normalizeOptionalText(input.body ?? "", JOURNAL_BODY_MAX);
-  const entry = await prisma.journalEntry.create({
-    data: {
-      childId: child.id,
-      promptKey: input.promptKey ?? null,
-      diaryDate: diaryDateForTimeZone(child.timeZone),
-      body,
-      originalBody: body,
-      status: body.trim() ? "SAVED" : "DRAFT",
-      clientRequestId,
-      draft: {
-        create: {
-          parentMessage: "",
-          supportRequest: "",
-        },
+  const hasBody = Boolean(body.trim());
+
+  const entry = await prisma.$transaction(async (tx) => {
+    const created = await tx.journalEntry.create({
+      data: {
+        childId: child.id,
+        promptKey: input.promptKey ?? null,
+        diaryDate: diaryDateForTimeZone(child.timeZone),
+        body,
+        originalBody: body,
+        status: hasBody ? "SAVED" : "DRAFT",
+        visibility: "GUARDIAN_VISIBLE",
+        clientRequestId,
+        firstNotifiedAt: hasBody ? new Date() : null,
       },
-    },
-    include: entryInclude,
+      include: entryInclude,
+    });
+
+    if (hasBody) {
+      const { notifyGuardiansOfVisibleEntry } = await import("@/lib/notifications");
+      await notifyGuardiansOfVisibleEntry({
+        entryId: created.id,
+        childId: child.id,
+        childDisplayName: child.displayName,
+        tx,
+      });
+    }
+
+    return created;
   });
 
-  return toChildEntryView(entry);
+  if (hasBody) {
+    const { enqueueGuardianAiJob } = await import("@/lib/journal-ai");
+    await enqueueGuardianAiJob({
+      entryId: entry.id,
+      sourceRevision: entry.revision,
+    });
+  }
+
+  return toOwnedEntryView(entry);
 }
 
 export async function updateJournalBody(input: {
@@ -291,7 +369,7 @@ export async function updateJournalBody(input: {
   expectedRevision: number;
   markSaved?: boolean;
 }) {
-  const { entry } = await requireOwnedEntry(input.childUserId, input.entryId);
+  const { child, entry } = await requireOwnedEntry(input.childUserId, input.entryId);
   const body = normalizeOptionalText(input.body, JOURNAL_BODY_MAX);
 
   if (entry.revision !== input.expectedRevision) {
@@ -303,6 +381,13 @@ export async function updateJournalBody(input: {
 
   const originalBody =
     !entry.originalBody.trim() && body.trim() ? body : entry.originalBody;
+  const wasEmpty = !entry.body.trim();
+  const willHaveBody = Boolean(body.trim());
+  const shouldFirstNotify =
+    entry.visibility === "GUARDIAN_VISIBLE" &&
+    !entry.firstNotifiedAt &&
+    wasEmpty &&
+    willHaveBody;
 
   const updated = await prisma.journalEntry.updateMany({
     where: {
@@ -313,7 +398,8 @@ export async function updateJournalBody(input: {
       body,
       originalBody,
       revision: { increment: 1 },
-      status: input.markSaved || body.trim() ? "SAVED" : "DRAFT",
+      status: input.markSaved || willHaveBody ? "SAVED" : "DRAFT",
+      ...(shouldFirstNotify ? { firstNotifiedAt: new Date() } : {}),
     },
   });
 
@@ -324,7 +410,6 @@ export async function updateJournalBody(input: {
     );
   }
 
-  // Mark pending suggestions as stale when the source text changes.
   await prisma.journalSuggestion.updateMany({
     where: {
       entryId: entry.id,
@@ -339,7 +424,41 @@ export async function updateJournalBody(input: {
     where: { id: entry.id },
     include: entryInclude,
   });
-  return toChildEntryView(fresh);
+
+  if (shouldFirstNotify) {
+    const { notifyGuardiansOfVisibleEntry } = await import("@/lib/notifications");
+    await notifyGuardiansOfVisibleEntry({
+      entryId: fresh.id,
+      childId: child.id,
+      childDisplayName: child.displayName,
+    });
+  }
+
+  if (fresh.visibility === "GUARDIAN_VISIBLE" && willHaveBody) {
+    const { enqueueGuardianAiJob } = await import("@/lib/journal-ai");
+    await enqueueGuardianAiJob({
+      entryId: fresh.id,
+      sourceRevision: fresh.revision,
+    });
+  }
+
+  return toOwnedEntryView(fresh);
+}
+
+export async function retryGuardianAiForEntry(input: {
+  childUserId: string;
+  entryId: string;
+}) {
+  const { entry } = await requireOwnedEntry(input.childUserId, input.entryId);
+  if (entry.visibility !== "GUARDIAN_VISIBLE") {
+    throw new JournalError("Bu kayıt için otomatik özet yok.", "FORBIDDEN");
+  }
+  if (!entry.body.trim()) {
+    throw new JournalError("Önce bir metin kaydet.", "VALIDATION");
+  }
+  const { retryGuardianAiForCurrentRevision } = await import("@/lib/journal-ai");
+  await retryGuardianAiForCurrentRevision(entry.id);
+  return toOwnedEntryView(entry);
 }
 
 export async function updateSharingDraft(input: {
@@ -350,6 +469,12 @@ export async function updateSharingDraft(input: {
   expectedRevision: number;
 }) {
   const { entry } = await requireOwnedEntry(input.childUserId, input.entryId);
+  if (entry.visibility !== "LEGACY_PRIVATE") {
+    throw new JournalError(
+      "Bu kayıt için ayrı paylaşım taslağı yok.",
+      "FORBIDDEN",
+    );
+  }
   let draft = entry.draft;
   if (!draft) {
     draft = await prisma.sharingDraft.create({
@@ -397,7 +522,7 @@ export async function updateSharingDraft(input: {
     where: { id: entry.id },
     include: entryInclude,
   });
-  return toChildEntryView(fresh);
+  return toOwnedEntryView(fresh);
 }
 
 export async function publishShare(input: {
@@ -408,6 +533,12 @@ export async function publishShare(input: {
   recipientUserIds?: string[];
 }) {
   const { child, entry } = await requireOwnedEntry(input.childUserId, input.entryId);
+  if (entry.visibility !== "LEGACY_PRIVATE") {
+    throw new JournalError(
+      "Bu kayıt doğrudan velilere görünür; ayrıca paylaşılmaz.",
+      "FORBIDDEN",
+    );
+  }
   let draft = entry.draft;
   if (!draft) {
     draft = await prisma.sharingDraft.create({
@@ -512,7 +643,17 @@ export async function publishShare(input: {
     where: { id: entry.id },
     include: entryInclude,
   });
-  return toChildEntryView(fresh);
+  if (fresh.published && !fresh.published.withdrawnAt) {
+    const { notifyLegacyShareRecipients } = await import("@/lib/notifications");
+    await notifyLegacyShareRecipients({
+      shareId: fresh.published.id,
+      entryId: fresh.id,
+      childId: child.id,
+      childDisplayName: child.displayName,
+      recipientUserIds: uniqueRecipients,
+    });
+  }
+  return toOwnedEntryView(fresh);
 }
 
 export async function withdrawShare(input: {
@@ -532,11 +673,14 @@ export async function withdrawShare(input: {
     });
   });
 
+  const { invalidateNotificationsForShare } = await import("@/lib/notifications");
+  await invalidateNotificationsForShare(entry.published.id);
+
   const fresh = await prisma.journalEntry.findUniqueOrThrow({
     where: { id: entry.id },
     include: entryInclude,
   });
-  return toChildEntryView(fresh);
+  return toOwnedEntryView(fresh);
 }
 
 export async function deleteJournalEntry(input: {
@@ -544,6 +688,10 @@ export async function deleteJournalEntry(input: {
   entryId: string;
 }) {
   const { entry } = await requireOwnedEntry(input.childUserId, input.entryId);
+  const { invalidateNotificationsForEntry } = await import("@/lib/notifications");
+  const { cancelAiJobsForEntry } = await import("@/lib/journal-ai");
+  await invalidateNotificationsForEntry(entry.id);
+  await cancelAiJobsForEntry(entry.id);
   await prisma.journalEntry.delete({ where: { id: entry.id } });
   return { ok: true as const };
 }
@@ -718,7 +866,7 @@ export async function applyTranscriptToEntry(input: {
     where: { id: entry.id },
     include: entryInclude,
   });
-  return toChildEntryView(fresh);
+  return toOwnedEntryView(fresh);
 }
 
 export async function createSummarySuggestion(input: {
@@ -755,7 +903,7 @@ export async function createSummarySuggestion(input: {
       where: { id: entry.id },
       include: entryInclude,
     });
-    return toChildEntryView(fresh);
+    return toOwnedEntryView(fresh);
   }
 
   // Re-check entry exists right before write (guards mid-flight delete).
@@ -787,7 +935,7 @@ export async function createSummarySuggestion(input: {
     where: { id: entry.id },
     include: entryInclude,
   });
-  return toChildEntryView(fresh);
+  return toOwnedEntryView(fresh);
 }
 
 export async function acceptSummarySuggestion(input: {
@@ -868,7 +1016,7 @@ export async function acceptSummarySuggestion(input: {
     where: { id: entry.id },
     include: entryInclude,
   });
-  return toChildEntryView(fresh);
+  return toOwnedEntryView(fresh);
 }
 
 export async function discardSummarySuggestion(input: {
@@ -893,7 +1041,7 @@ export async function discardSummarySuggestion(input: {
     where: { id: entry.id },
     include: entryInclude,
   });
-  return toChildEntryView(fresh);
+  return toOwnedEntryView(fresh);
 }
 
 export type ParentShareDetail = {
@@ -1181,3 +1329,108 @@ export async function parentTryGetEntry(parentUserId: string, entryId: string) {
     // Explicitly omit body / transcripts / suggestions
   };
 }
+
+export type ParentVisibleEntry = {
+  entryId: string;
+  childId: string;
+  childDisplayName: string;
+  diaryDate: string;
+  updatedAt: string;
+  body: string;
+  revision: number;
+  kind: "guardian_visible";
+};
+
+export type ParentHomeFeedItem =
+  | (ParentSharedItem & { feedKind: "legacy_share" })
+  | (ParentVisibleEntry & {
+      feedKind: "guardian_visible";
+      excerpt: string;
+    });
+
+/** List GUARDIAN_VISIBLE entries for active guardianship (full narrative authorized). */
+export async function listParentVisibleEntries(
+  parentUserId: string,
+  childId?: string,
+): Promise<ParentVisibleEntry[]> {
+  const accesses = await prisma.childGuardianAccess.findMany({
+    where: {
+      userId: parentUserId,
+      revokedAt: null,
+      ...(childId ? { childId } : {}),
+    },
+  });
+  if (accesses.length === 0) return [];
+
+  const childIds = accesses.map((a) => a.childId);
+  const entries = await prisma.journalEntry.findMany({
+    where: {
+      childId: { in: childIds },
+      visibility: "GUARDIAN_VISIBLE",
+      status: "SAVED",
+      body: { not: "" },
+    },
+    include: {
+      child: { select: { id: true, displayName: true } },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 50,
+  });
+
+  return entries.map((e) => ({
+    entryId: e.id,
+    childId: e.childId,
+    childDisplayName: e.child.displayName,
+    diaryDate: e.diaryDate.toISOString().slice(0, 10),
+    updatedAt: e.updatedAt.toISOString(),
+    body: e.body,
+    revision: e.revision,
+    kind: "guardian_visible" as const,
+  }));
+}
+
+export async function getParentVisibleEntry(
+  parentUserId: string,
+  entryId: string,
+) {
+  const entry = await prisma.journalEntry.findUnique({
+    where: { id: entryId },
+    include: {
+      child: { select: { id: true, displayName: true } },
+    },
+  });
+  if (
+    !entry ||
+    entry.visibility !== "GUARDIAN_VISIBLE" ||
+    entry.status !== "SAVED" ||
+    !entry.body.trim()
+  ) {
+    throw new JournalError("Kayıt bulunamadı.", "NOT_FOUND");
+  }
+
+  const access = await prisma.childGuardianAccess.findFirst({
+    where: {
+      userId: parentUserId,
+      childId: entry.childId,
+      revokedAt: null,
+    },
+  });
+  if (!access) {
+    throw new JournalError("Kayıt bulunamadı.", "NOT_FOUND");
+  }
+
+  const { getGuardianAiForEntry } = await import("@/lib/journal-ai");
+  const ai = await getGuardianAiForEntry(entry.id, entry.revision);
+
+  return {
+    entryId: entry.id,
+    childId: entry.childId,
+    childDisplayName: entry.child.displayName,
+    diaryDate: entry.diaryDate.toISOString().slice(0, 10),
+    updatedAt: entry.updatedAt.toISOString(),
+    body: entry.body,
+    revision: entry.revision,
+    ai,
+  };
+}
+

@@ -29,6 +29,7 @@ import {
   onboardParentWithChild,
   pairChildAndGetCookie,
   signInAndGetCookie,
+  markEntryLegacyPrivate,
 } from "./helpers";
 import { POST as postParentPlan } from "@/app/api/parent/plan/route";
 import { POST as postParentGoals } from "@/app/api/parent/goals/route";
@@ -140,20 +141,11 @@ describe("Milestone 10 multi-guardian", () => {
     ).rejects.toBeInstanceOf(AuthorizationError);
 
     const cookie = await signInAndGetCookie(invitee.email, invitee.password);
-    const planMut = await postParentPlan(
-      request("http://localhost:3000/api/parent/plan", {
-        method: "POST",
-        headers: { cookie, origin: "http://localhost:3000" },
-      }),
-    );
+    void cookie;
+    const planMut = await postParentPlan();
     expect(planMut.status).toBe(403);
 
-    const goalMut = await postParentGoals(
-      request("http://localhost:3000/api/parent/goals", {
-        method: "POST",
-        headers: { cookie, origin: "http://localhost:3000" },
-      }),
-    );
+    const goalMut = await postParentGoals();
     expect(goalMut.status).toBe(403);
   });
 
@@ -284,6 +276,7 @@ describe("Milestone 10 multi-guardian", () => {
       childUserId,
       body: "özel",
     });
+    await markEntryLegacyPrivate(entry.id);
     const draft = await updateSharingDraft({
       childUserId,
       entryId: entry.id,

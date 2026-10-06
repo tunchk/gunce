@@ -57,10 +57,10 @@ test("goal → steps → complete on Pano → progress → parent read-only", as
 
   await page.goto("/cocuk/haftam?view=pano");
   await expect(page.getByRole("tab", { name: "Pano" })).toHaveAttribute("aria-selected", "true");
-  const mobilePanel = page.locator(".md\\:hidden").first();
-  await mobilePanel.getByRole("tab", { name: /Yapılacak/ }).click();
+  const statusTabs = page.getByRole("tablist", { name: "Pano sütunları" });
+  await statusTabs.getByRole("tab", { name: /Yapılacak/ }).click();
 
-  const todoCard = mobilePanel.locator("article").filter({ hasText: "İlk 5 kelimeyi seç" });
+  const todoCard = page.locator("article").filter({ hasText: "İlk 5 kelimeyi seç" });
   await expect(todoCard).toBeVisible({ timeout: 10_000 });
   await Promise.all([
     page.waitForResponse(
@@ -72,8 +72,8 @@ test("goal → steps → complete on Pano → progress → parent read-only", as
     todoCard.getByRole("button", { name: "Başla" }).click(),
   ]);
 
-  await mobilePanel.getByRole("tab", { name: /Yapıyorum/ }).click();
-  const doingCard = mobilePanel.locator("article").filter({ hasText: "İlk 5 kelimeyi seç" });
+  await statusTabs.getByRole("tab", { name: /Yapıyorum/ }).click();
+  const doingCard = page.locator("article").filter({ hasText: "İlk 5 kelimeyi seç" });
   await expect(doingCard).toBeVisible({ timeout: 10_000 });
   await Promise.all([
     page.waitForResponse(
@@ -85,9 +85,13 @@ test("goal → steps → complete on Pano → progress → parent read-only", as
     doingCard.getByRole("button", { name: "Tamamladım" }).click(),
   ]);
 
-  await mobilePanel.getByRole("tab", { name: /Tamamladım/ }).click();
+  const skip = page.getByRole("button", { name: "Şimdi geç" });
+  if (await skip.isVisible().catch(() => false)) await skip.click();
+  else await expect(page.getByText("Neler yaptın?")).toBeVisible({ timeout: 5_000 }).catch(() => undefined);
+
+  await statusTabs.getByRole("tab", { name: /Tamamlandı/ }).click();
   await expect(
-    mobilePanel.locator("article").filter({ hasText: "İlk 5 kelimeyi seç" }),
+    page.locator("article").filter({ hasText: "İlk 5 kelimeyi seç" }),
   ).toBeVisible({ timeout: 10_000 });
 
   await page.goto("/cocuk/hedefler");

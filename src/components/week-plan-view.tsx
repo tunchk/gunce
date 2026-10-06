@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { WeekNav, type PlanningWeek } from "@/components/board-plan-view";
+import { StudyStatusBadge } from "@/components/study-status-badge";
 import {
   commitmentDateLabel,
   commitmentTypeLabel,
   studyStepMeta,
-  studyStepStatusLabel,
 } from "@/lib/plan-ui";
 import { formatLongDateTr } from "@/lib/plan-dates";
 
@@ -33,6 +33,13 @@ export function WeekPlanView({
     [week.days, selected],
   );
 
+  function commitmentHref(id: string) {
+    return readOnly ? `/veli/plan/is/${id}` : `/cocuk/plan/is/${id}`;
+  }
+  function stepHref(id: string) {
+    return readOnly ? `/veli/plan/adim/${id}` : `/cocuk/plan/adim/${id}`;
+  }
+
   return (
     <div className="space-y-4">
       <WeekNav week={week} view="hafta" readOnly={readOnly} />
@@ -46,10 +53,11 @@ export function WeekPlanView({
               key={d.date}
               type="button"
               onClick={() => setSelected(d.date)}
-              className="flex min-h-[4.5rem] flex-col items-center justify-center rounded-2xl px-1 py-2 text-center text-xs"
+              className="flex min-h-[4.5rem] flex-col items-center justify-center rounded-2xl px-1 py-2 text-center text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 border: isSelected ? "2px solid var(--accent)" : "1px solid var(--line)",
                 background: isToday ? "var(--accent-soft)" : "white",
+                outlineColor: "var(--accent)",
               }}
               aria-pressed={isSelected}
             >
@@ -80,44 +88,25 @@ export function WeekPlanView({
           <ul className="mt-2 space-y-2">
             {day.commitments.map((c) => (
               <li key={c.id}>
-                {readOnly ? (
-                  <div
-                    className="rounded-2xl border px-3 py-3"
-                    style={{
-                      borderColor: "var(--line)",
-                      background: "rgba(15, 118, 110, 0.06)",
-                    }}
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-wide">
-                      {commitmentTypeLabel(c.type)}
-                      {c.completedAt ? " · tamamlandı" : ""}
-                    </p>
-                    <p className="font-medium">{c.title}</p>
-                    <p className="text-sm" style={{ color: "var(--muted)" }}>
-                      {commitmentDateLabel(c)}
-                      {c.subject ? ` · ${c.subject}` : ""}
-                    </p>
-                  </div>
-                ) : (
-                  <Link
-                    href={`/cocuk/plan/is/${c.id}`}
-                    className="block rounded-2xl border px-3 py-3"
-                    style={{
-                      borderColor: "var(--line)",
-                      background: "rgba(15, 118, 110, 0.06)",
-                    }}
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-wide">
-                      {commitmentTypeLabel(c.type)}
-                      {c.completedAt ? " · tamamlandı" : ""}
-                    </p>
-                    <p className="font-medium">{c.title}</p>
-                    <p className="text-sm" style={{ color: "var(--muted)" }}>
-                      {commitmentDateLabel(c)}
-                      {c.subject ? ` · ${c.subject}` : ""}
-                    </p>
-                  </Link>
-                )}
+                <Link
+                  href={commitmentHref(c.id)}
+                  className="block rounded-2xl border px-3 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{
+                    borderColor: "var(--line)",
+                    background: "rgba(15, 118, 110, 0.06)",
+                    outlineColor: "var(--accent)",
+                  }}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide">
+                    {commitmentTypeLabel(c.type)}
+                    {c.completedAt ? " · tamamlandı" : ""}
+                  </p>
+                  <p className="font-medium">{c.title}</p>
+                  <p className="text-sm" style={{ color: "var(--muted)" }}>
+                    {commitmentDateLabel(c)}
+                    {c.subject ? ` · ${c.subject}` : ""}
+                  </p>
+                </Link>
               </li>
             ))}
           </ul>
@@ -142,34 +131,21 @@ export function WeekPlanView({
           <ul className="mt-2 space-y-2">
             {day.studySteps.map((s) => (
               <li key={s.id}>
-                {readOnly ? (
-                  <div
-                    className="rounded-2xl border px-3 py-3"
-                    style={{ borderColor: "var(--line)" }}
-                  >
-                    <p className="text-xs font-semibold" style={{ color: "var(--muted)" }}>
-                      {studyStepStatusLabel(s.status)}
-                    </p>
-                    <p className="font-medium">{s.title}</p>
-                    <p className="text-sm" style={{ color: "var(--muted)" }}>
-                      {studyStepMeta(s)}
-                    </p>
-                  </div>
-                ) : (
-                  <Link
-                    href={`/cocuk/plan/adim/${s.id}`}
-                    className="block rounded-2xl border px-3 py-3"
-                    style={{ borderColor: "var(--line)" }}
-                  >
-                    <p className="text-xs font-semibold" style={{ color: "var(--muted)" }}>
-                      {studyStepStatusLabel(s.status)}
-                    </p>
-                    <p className="font-medium">{s.title}</p>
-                    <p className="text-sm" style={{ color: "var(--muted)" }}>
-                      {studyStepMeta(s)}
-                    </p>
-                  </Link>
-                )}
+                <Link
+                  href={stepHref(s.id)}
+                  className="block rounded-2xl border px-3 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{ borderColor: "var(--line)", outlineColor: "var(--accent)" }}
+                >
+                  <StudyStatusBadge
+                    status={s.status}
+                    plannedDate={s.plannedDate}
+                    today={week.today}
+                  />
+                  <p className="mt-2 font-medium">{s.title}</p>
+                  <p className="text-sm" style={{ color: "var(--muted)" }}>
+                    {studyStepMeta(s)}
+                  </p>
+                </Link>
               </li>
             ))}
           </ul>
@@ -182,28 +158,21 @@ export function WeekPlanView({
           <ul className="mt-2 space-y-2">
             {week.unscheduled.map((s) => (
               <li key={s.id}>
-                {readOnly ? (
-                  <div
-                    className="rounded-2xl border border-dashed px-3 py-3"
-                    style={{ borderColor: "var(--line)" }}
-                  >
-                    <p className="font-medium">{s.title}</p>
-                    <p className="text-sm" style={{ color: "var(--muted)" }}>
-                      {studyStepStatusLabel(s.status)} · {studyStepMeta(s)}
-                    </p>
-                  </div>
-                ) : (
-                  <Link
-                    href={`/cocuk/plan/adim/${s.id}`}
-                    className="block rounded-2xl border border-dashed px-3 py-3"
-                    style={{ borderColor: "var(--line)" }}
-                  >
-                    <p className="font-medium">{s.title}</p>
-                    <p className="text-sm" style={{ color: "var(--muted)" }}>
-                      {studyStepStatusLabel(s.status)} · {studyStepMeta(s)}
-                    </p>
-                  </Link>
-                )}
+                <Link
+                  href={stepHref(s.id)}
+                  className="block rounded-2xl border border-dashed px-3 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{ borderColor: "var(--line)", outlineColor: "var(--accent)" }}
+                >
+                  <StudyStatusBadge
+                    status={s.status}
+                    plannedDate={s.plannedDate}
+                    today={week.today}
+                  />
+                  <p className="mt-2 font-medium">{s.title}</p>
+                  <p className="text-sm" style={{ color: "var(--muted)" }}>
+                    {studyStepMeta(s)}
+                  </p>
+                </Link>
               </li>
             ))}
           </ul>
@@ -218,28 +187,21 @@ export function WeekPlanView({
               .filter((s) => s.plannedDate !== selected)
               .map((s) => (
                 <li key={s.id}>
-                  {readOnly ? (
-                    <div
-                      className="rounded-2xl border px-3 py-3"
-                      style={{ borderColor: "var(--line)" }}
-                    >
-                      <p className="font-medium">{s.title}</p>
-                      <p className="text-sm" style={{ color: "var(--muted)" }}>
-                        {studyStepStatusLabel(s.status)} · {studyStepMeta(s)}
-                      </p>
-                    </div>
-                  ) : (
-                    <Link
-                      href={`/cocuk/plan/adim/${s.id}`}
-                      className="block rounded-2xl border px-3 py-3"
-                      style={{ borderColor: "var(--line)" }}
-                    >
-                      <p className="font-medium">{s.title}</p>
-                      <p className="text-sm" style={{ color: "var(--muted)" }}>
-                        {studyStepStatusLabel(s.status)} · {studyStepMeta(s)}
-                      </p>
-                    </Link>
-                  )}
+                  <Link
+                    href={stepHref(s.id)}
+                    className="block rounded-2xl border px-3 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{ borderColor: "var(--line)", outlineColor: "var(--accent)" }}
+                  >
+                    <StudyStatusBadge
+                      status={s.status}
+                      plannedDate={s.plannedDate}
+                      today={week.today}
+                    />
+                    <p className="mt-2 font-medium">{s.title}</p>
+                    <p className="text-sm" style={{ color: "var(--muted)" }}>
+                      {studyStepMeta(s)}
+                    </p>
+                  </Link>
                 </li>
               ))}
           </ul>

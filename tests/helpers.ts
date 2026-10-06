@@ -120,4 +120,20 @@ export function request(url: string, init?: RequestInit) {
   return new Request(url, init) as unknown as import("next/server").NextRequest;
 }
 
+/** Convert a new-model entry into a legacy-private entry for share-flow tests. */
+export async function markEntryLegacyPrivate(entryId: string) {
+  await prisma.appNotification.deleteMany({ where: { entryId } });
+  await prisma.journalAiJob.deleteMany({ where: { entryId } });
+  await prisma.journalGuardianAi.deleteMany({ where: { entryId } });
+  await prisma.journalEntry.update({
+    where: { id: entryId },
+    data: { visibility: "LEGACY_PRIVATE", firstNotifiedAt: null },
+  });
+  await prisma.sharingDraft.upsert({
+    where: { entryId },
+    create: { entryId, parentMessage: "", supportRequest: "" },
+    update: {},
+  });
+}
+
 export { prisma, auth, createPairingInvitation, redeemPairingInvitation, revokeChildSessions };

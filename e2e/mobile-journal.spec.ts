@@ -74,13 +74,13 @@ for (const vp of VIEWPORTS) {
     await assertComfortableTargets(page, [
       "Mikrofonla anlat",
       "Yazımı toparla",
-      "Kaydet (bende kalsın)",
+      "Bitirdim",
     ]);
 
     // Cancel path must not wipe typed text (simulate leaving review idle after mic cancel UI).
     await expect(page.locator("#journal-body")).toHaveValue(writing);
 
-    await page.getByRole("button", { name: "Kaydet (bende kalsın)" }).click();
+    await page.getByRole("button", { name: "Bitirdim" }).click();
     await expect(page.getByText("Kaydedildi")).toBeVisible({ timeout: 10_000 });
     await assertNoHorizontalOverflow(page);
 
@@ -93,7 +93,7 @@ for (const vp of VIEWPORTS) {
       "Özeti kabul et",
       "Öneriyi sil",
       "Yeniden öner",
-      "Kaydet (bende kalsın)",
+      "Bitirdim",
     ]);
 
     // Failure-style discard keeps original writing in the main field until accept.

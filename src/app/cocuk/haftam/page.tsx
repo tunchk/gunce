@@ -29,8 +29,9 @@ export default async function ChildWeekPage({
   return (
     <Shell
       title="Planım"
-      subtitle="Ödevler, sınavlar ve çalışma adımların. Hafta ve Pano aynı kayıtları gösterir."
+      subtitle="Ödevler, sınavlar ve çalışma adımların."
       withChildNav
+      planWide
     >
       <div className="space-y-4">
         <PlanParentNotice />

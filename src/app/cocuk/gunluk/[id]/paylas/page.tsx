@@ -23,12 +23,16 @@ export default async function ShareReviewPage({ params }: Props) {
     throw error;
   }
 
+  if (entry.visibility === "GUARDIAN_VISIBLE") {
+    redirect(`/cocuk/gunluk/${entry.id}`);
+  }
+
   const guardians = await listShareableGuardians(child.id);
 
   return (
     <Shell
       title="Ne paylaşılacak?"
-      subtitle="Özel yazın sende kalır. Velinin göreceği metni ayrıca hazırlarsın."
+      subtitle="Eski kayıtlar için: özel yazın sende kalır. Velinin göreceği metni ayrıca hazırlarsın."
       withChildNav
     >
       <Panel>

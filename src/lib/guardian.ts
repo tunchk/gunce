@@ -413,6 +413,14 @@ export async function removeGuardianAccess(input: {
       data: { revokedAt: new Date() },
     });
   });
+
+  const { invalidateNotificationsForGuardianChild } = await import(
+    "@/lib/notifications"
+  );
+  await invalidateNotificationsForGuardianChild({
+    guardianUserId: input.targetUserId,
+    childId: input.childId,
+  });
 }
 
 /** Active guardians eligible as share recipients (for child UI). */

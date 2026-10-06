@@ -13,6 +13,7 @@ import {
   prisma,
   request,
   signInAndGetCookie,
+  markEntryLegacyPrivate,
 } from "./helpers";
 import {
   createJournalEntry,
@@ -111,7 +112,7 @@ describe("Journal ownership and sharing", () => {
     void cookieA;
   });
 
-  it("never returns private journal text to parents, even by entry id", async () => {
+  it("never returns private journal text to parents via legacy share APIs", async () => {
     const parent = await createParent();
     const child = await onboardParentWithChild(parent.user.id);
     await pairChildAndGetCookie(parent.user.id, child.id);
@@ -123,6 +124,7 @@ describe("Journal ownership and sharing", () => {
       promptKey: "LIKED",
       body: "ÖZEL METİN ASLA GÖRÜNMESİN",
     });
+    await markEntryLegacyPrivate(entry.id);
 
     const parentCookie = await signInAndGetCookie(parent.email, parent.password);
 
@@ -180,18 +182,19 @@ describe("Journal ownership and sharing", () => {
     expect(post.status).toBe(403);
   });
 
-  it("private saves produce no parent-visible content", async () => {
+  it("legacy-private saves produce no parent-visible share content", async () => {
     const parent = await createParent();
     const child = await onboardParentWithChild(parent.user.id);
     await pairChildAndGetCookie(parent.user.id, child.id);
     const childUserId = (await prisma.childProfile.findUniqueOrThrow({ where: { id: child.id } }))
       .userId!;
 
-    await createJournalEntry({
+    const entry = await createJournalEntry({
       childUserId,
       body: "sadece bende",
       clientRequestId: "priv-1",
     });
+    await markEntryLegacyPrivate(entry.id);
 
     const parentCookie = await signInAndGetCookie(parent.email, parent.password);
     const shared = await getShared(
@@ -215,6 +218,7 @@ describe("Journal ownership and sharing", () => {
       childUserId,
       body: "özel günlük uzun metin",
     });
+    await markEntryLegacyPrivate(entry.id);
     const drafted = await updateSharingDraft({
       childUserId,
       entryId: entry.id,
@@ -252,6 +256,7 @@ describe("Journal ownership and sharing", () => {
       childUserId,
       body: "özel v1",
     });
+    await markEntryLegacyPrivate(entry.id);
     let draft = await updateSharingDraft({
       childUserId,
       entryId: entry.id,
@@ -315,6 +320,7 @@ describe("Journal ownership and sharing", () => {
       .userId!;
 
     const entry = await createJournalEntry({ childUserId, body: "x" });
+    await markEntryLegacyPrivate(entry.id);
     const draft = await updateSharingDraft({
       childUserId,
       entryId: entry.id,
@@ -457,7 +463,15 @@ describe("Journal ownership and sharing", () => {
     );
     expect(created.status).toBe(201);
     const { entry } = await created.json();
-    expect(entry.draft.revision).toBe(1);
+    await markEntryLegacyPrivate(entry.id);
+    const legacyEntry = await getJournal(
+      request(`http://localhost:3000/api/child/journal/${entry.id}`, {
+        headers: { cookie, origin: "http://localhost:3000" },
+      }),
+      params(entry.id),
+    );
+    const { entry: refreshed } = await legacyEntry.json();
+    expect(refreshed.draft.revision).toBe(1);
 
     const updatedDraft = await patchJournal(
       request(`http://localhost:3000/api/child/journal/${entry.id}`, {
@@ -471,7 +485,7 @@ describe("Journal ownership and sharing", () => {
           op: "update_draft",
           parentMessage: "Velinin göreceği kısa not (API)",
           supportRequest: "Desteğe ihtiyacım var",
-          expectedRevision: entry.draft.revision,
+          expectedRevision: refreshed.draft.revision,
         }),
       }),
       params(entry.id),

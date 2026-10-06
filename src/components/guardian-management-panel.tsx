@@ -56,8 +56,10 @@ export function GuardianManagementPanel({
       <div>
         <h2 className="text-lg font-semibold">Veliler — {childName}</h2>
         <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-          Uygulama daveti erişim verir; yasal velayet belgesi doğrulamaz. Plan ve hedefler
-          aktif velilere görünür. Günlük paylaşımları çocuk alıcı seçerek onaylar.
+          Uygulama daveti erişim verir; yasal velayet belgesi doğrulamaz. Plan, hedefler ve
+          yeni kaydedilen günlükler aktif velilere görünür. Yeni kabul edilen veli, çocuğun
+          yeni-model günlük geçmişini okuyabilir; erişimi kaldırılan veli göremez. Eski
+          (özel) günlük metinleri ancak çocuğun onayladığı paylaşımla görünür.
         </p>
       </div>
 

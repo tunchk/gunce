@@ -11,7 +11,9 @@ import {
   publishShare,
   withdrawShare,
   prisma,
+  markEntryLegacyPrivate,
 } from "./fixtures";
+
 
 test.beforeEach(async () => {
   await wipe();
@@ -31,6 +33,7 @@ test("child publishes concrete message; parent sees detail + guidance; withdraw 
     childUserId,
     body: "ÖZEL günlük: uzun özel metin",
   });
+  await markEntryLegacyPrivate(entry.id);
   const draft = await updateSharingDraft({
     childUserId,
     entryId: entry.id,

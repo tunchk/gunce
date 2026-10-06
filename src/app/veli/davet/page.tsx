@@ -31,7 +31,10 @@ export default async function GuardianInvitePage({ searchParams }: Props) {
       <h1 className="mt-4 text-2xl font-semibold">Veli daveti</h1>
       <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
         Bu davet uygulama erişimi verir; yasal velayet belgesi doğrulamaz. Bağlantıyı yalnızca
-        açmak erişim vermez — hesabınla giriş yapıp açıkça kabul etmelisin.
+        açmak erişim vermez — hesabınla giriş yapıp açıkça kabul etmelisin. Kabul edince plan,
+        hedefler ve çocuğun kaydettiği yeni günlükleri görebilirsin. Eski özel günlük metinleri
+        otomatik açılmaz; yalnızca çocuğun sana onayladığı paylaşımlar görünür. Geçmiş
+        bildirimler yeniden oluşturulmaz.
       </p>
 
       <div className="mt-6 space-y-4">

@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { CompletionReflectionPrompt } from "@/components/completion-reflection-prompt";
+import { StudyStatusBadge } from "@/components/study-status-badge";
 import { Button, FieldError, TextField } from "@/components/ui";
 import { commitmentDateLabel, commitmentTypeLabel, studyStepMeta, studyStepStatusLabel } from "@/lib/plan-ui";
 import type { CommitmentView, StudyStepStatus, StudyStepView } from "@/lib/plan";
+import { calendarDateInTimeZone } from "@/lib/plan-dates";
 
 export function CommitmentEditor({
   commitment,
@@ -297,9 +300,14 @@ export function StudyStepEditor({
   );
   const [revision, setRevision] = useState(step.revision);
   const [status, setStatus] = useState<StudyStepStatus>(step.status);
+  const [completionReflection, setCompletionReflection] = useState(
+    step.completionReflection || "",
+  );
+  const [showReflection, setShowReflection] = useState(false);
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const today = calendarDateInTimeZone("Europe/Istanbul");
 
   async function save(allowAfterDeadline = false) {
     setPending(true);
@@ -352,6 +360,12 @@ export function StudyStepEditor({
   }
 
   async function setStepStatus(next: StudyStepStatus) {
+    if (next === "TODO" && completionReflection) {
+      const ok = window.confirm(
+        "Yapılacaklara alınca tamamlanma notu da silinir. Devam etmek istiyor musun?",
+      );
+      if (!ok) return;
+    }
     setPending(true);
     setError(undefined);
     try {
@@ -373,8 +387,14 @@ export function StudyStepEditor({
         setPending(false);
         return;
       }
+      const previousStatus = status;
       setRevision(data.studyStep!.revision);
       setStatus(data.studyStep!.status);
+      setCompletionReflection(data.studyStep!.completionReflection || "");
+      if (next === "DONE" && previousStatus !== "DONE") {
+        setShowReflection(true);
+      }
+      if (next !== "DONE") setShowReflection(false);
       router.refresh();
       setPending(false);
     } catch {
@@ -466,9 +486,26 @@ export function StudyStepEditor({
         Değişiklikleri kaydet
       </Button>
 
-      <p className="text-sm" style={{ color: "var(--muted)" }}>
-        Durum: {studyStepStatusLabel(status)}
-      </p>
+      <div className="space-y-2">
+        <p className="text-sm font-semibold">Durum</p>
+        <StudyStatusBadge
+          status={status}
+          plannedDate={plannedDate || null}
+          today={today}
+        />
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          {studyStepMeta({
+            ...step,
+            status,
+            plannedDate: plannedDate || null,
+            estimatedMinutes: estimatedMinutes
+              ? Number(estimatedMinutes)
+              : step.estimatedMinutes,
+            completionReflection,
+            revision,
+          })}
+        </p>
+      </div>
       {status === "DONE" ? (
         <Button
           type="button"
@@ -500,6 +537,33 @@ export function StudyStepEditor({
           </Button>
         </>
       )}
+
+      {showReflection && status === "DONE" ? (
+        <CompletionReflectionPrompt
+          step={{
+            ...step,
+            status,
+            revision,
+            completionReflection,
+          }}
+          onUpdated={(next) => {
+            setRevision(next.revision);
+            setCompletionReflection(next.completionReflection || "");
+            setStatus(next.status);
+          }}
+          onDismiss={() => setShowReflection(false)}
+        />
+      ) : null}
+
+      {status === "DONE" && completionReflection && !showReflection ? (
+        <div className="rounded-2xl border p-3" style={{ borderColor: "var(--line)" }}>
+          <p className="text-sm font-semibold">Tamamlama notun</p>
+          <p className="mt-2 whitespace-pre-wrap text-sm">{completionReflection}</p>
+          <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
+            Velilerin bu notu görebilir.
+          </p>
+        </div>
+      ) : null}
 
       {!confirmDelete ? (
         <Button type="button" variant="danger" onClick={() => setConfirmDelete(true)}>

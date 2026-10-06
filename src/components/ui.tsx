@@ -10,6 +10,8 @@ type Props = {
   title?: string;
   subtitle?: string;
   wide?: boolean;
+  /** Wider content for planning boards (Hafta/Pano). */
+  planWide?: boolean;
   /** Fixed child bottom navigation (Ana / Günlüğüm / Planım / Hedeflerim). */
   withChildNav?: boolean;
   /** Optional top-right action (e.g. Ayarlar). */
@@ -21,14 +23,16 @@ export function Shell({
   title,
   subtitle,
   wide,
+  planWide,
   withChildNav,
   headerAction,
 }: Props) {
+  const maxWidth = planWide ? 1120 : wide ? 720 : 480;
   const body = (
     <>
       <main
         className={`mx-auto w-full px-4 py-8 sm:px-6 ${withChildNav ? "pb-36" : ""}`}
-        style={{ maxWidth: wide ? 720 : 480 }}
+        style={{ maxWidth }}
       >
         <header className="mb-8">
           <div className="flex items-start justify-between gap-3">

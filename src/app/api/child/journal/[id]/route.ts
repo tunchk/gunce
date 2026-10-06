@@ -8,6 +8,7 @@ import {
   getChildEntry,
   JournalError,
   publishShare,
+  retryGuardianAiForEntry,
   updateJournalBody,
   updateSharingDraft,
   withdrawShare,
@@ -191,6 +192,14 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
         childUserId: authz.session!.user.id,
         entryId: id,
         suggestionId: body.suggestionId,
+      });
+      return NextResponse.json({ entry }, { headers: NO_STORE });
+    }
+
+    if (body.op === "retry_guardian_ai") {
+      const entry = await retryGuardianAiForEntry({
+        childUserId: authz.session!.user.id,
+        entryId: id,
       });
       return NextResponse.json({ entry }, { headers: NO_STORE });
     }

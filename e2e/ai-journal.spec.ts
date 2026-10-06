@@ -32,7 +32,7 @@ test("typed entry → suggested summary → edit/accept → stays private", asyn
   const writing =
     "Bugün okulda arkadaşımla oynadım galiba. Belki yarın da görüşürüz.";
   await page.locator("#journal-body").fill(writing);
-  await page.getByRole("button", { name: "Kaydet (bende kalsın)" }).click();
+  await page.getByRole("button", { name: "Bitirdim" }).click();
   await expect(page.getByText("Kaydedildi")).toBeVisible({ timeout: 10_000 });
 
   await page.getByRole("button", { name: "Yazımı toparla" }).click();
@@ -72,7 +72,7 @@ test("provider failure leaves writing intact", async ({ browser }) => {
   await openFreeJournal(page);
   const writing = "Kalacak metin __FAIL_SUMMARY__ ve devamı";
   await page.locator("#journal-body").fill(writing);
-  await page.getByRole("button", { name: "Kaydet (bende kalsın)" }).click();
+  await page.getByRole("button", { name: "Bitirdim" }).click();
   await expect(page.getByText("Kaydedildi")).toBeVisible({ timeout: 10_000 });
 
   await page.getByRole("button", { name: "Yazımı toparla" }).click();
@@ -93,7 +93,7 @@ test("accepted summary shared only after explicit snapshot publish", async ({ br
 
   await openFreeJournal(page);
   await page.locator("#journal-body").fill("ÖZEL_GİZLİ_GÜNLÜK: bugün çok yoruldum belki.");
-  await page.getByRole("button", { name: "Kaydet (bende kalsın)" }).click();
+  await page.getByRole("button", { name: "Bitirdim" }).click();
   await expect(page.getByText("Kaydedildi")).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Yazımı toparla" }).click();
   await expect(page.getByRole("heading", { name: "Önerilen özet" })).toBeVisible({

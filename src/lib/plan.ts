@@ -118,6 +118,8 @@ export type StudyStepView = {
   status: StudyStepStatus;
   /** Metadata only; null when not DONE or when historical timestamp was lost. */
   completedAt: string | null;
+  /** Child self-report after DONE; empty when none. Guardians with access can read. */
+  completionReflection: string;
   revision: number;
   afterDeadline: boolean;
 };
@@ -171,6 +173,7 @@ export function toStudyStepViewFromRow(
     relatedGoalId?: string | null;
     status: PlanStudyStepStatus;
     completedAt: Date | null;
+    completionReflection?: string | null;
     revision: number;
     relatedCommitment?: {
       title: string;
@@ -205,6 +208,7 @@ export function toStudyStepViewFromRow(
     relatedGoalTitle: s.relatedGoal?.title ?? null,
     status: s.status,
     completedAt: s.completedAt?.toISOString() ?? null,
+    completionReflection: (s.completionReflection ?? "").trim(),
     revision: s.revision,
     afterDeadline,
   };
@@ -235,6 +239,8 @@ export async function createCommitment(input: {
   eventTimeLocal?: string | null;
   dateUnknown?: boolean;
   clientRequestId?: string | null;
+  /** When true, skip per-item guardian notify (e.g. extract batch uses a grouped notify). */
+  suppressGuardianNotify?: boolean;
 }) {
   const child = await requireChildProfile(input.childUserId);
   const clientRequestId = input.clientRequestId?.trim() || null;
@@ -292,6 +298,19 @@ export async function createCommitment(input: {
     },
     include: { _count: { select: { studySteps: true } } },
   });
+  if (!input.suppressGuardianNotify) {
+    const { notifyGuardiansOfPlanRecordCreated } = await import(
+      "@/lib/plan-notifications"
+    );
+    await notifyGuardiansOfPlanRecordCreated({
+      childId: child.id,
+      childDisplayName: child.displayName,
+      kind: "commitment",
+      recordId: created.id,
+      type: created.type,
+      title: created.title,
+    });
+  }
   return toCommitmentView(created);
 }
 
@@ -306,6 +325,7 @@ export async function createStudyStep(input: {
   relatedGoalId?: string | null;
   allowAfterDeadline?: boolean;
   clientRequestId?: string | null;
+  suppressGuardianNotify?: boolean;
 }) {
   const child = await requireChildProfile(input.childUserId);
   const clientRequestId = input.clientRequestId?.trim() || null;
@@ -396,6 +416,18 @@ export async function createStudyStep(input: {
   });
   const { syncStudyStepReminder } = await import("@/lib/reminder");
   await syncStudyStepReminder(created.id);
+  if (!input.suppressGuardianNotify) {
+    const { notifyGuardiansOfPlanRecordCreated } = await import(
+      "@/lib/plan-notifications"
+    );
+    await notifyGuardiansOfPlanRecordCreated({
+      childId: child.id,
+      childDisplayName: child.displayName,
+      kind: "study_step",
+      recordId: created.id,
+      title: created.title,
+    });
+  }
   return toStudyStepView(created);
 }
 
@@ -453,6 +485,15 @@ export async function updateCommitment(input: {
     }
   }
 
+  const prevDue = formatCalendarDate(existing.dueDate);
+  const prevEvent = formatCalendarDate(existing.eventDate);
+  const nextDue = formatCalendarDate(dueDate);
+  const nextEvent = formatCalendarDate(eventDate);
+  const scheduleChanged =
+    prevDue !== nextDue ||
+    prevEvent !== nextEvent ||
+    (existing.eventTimeLocal || null) !== (eventTimeLocal || null);
+
   const updated = await prisma.planCommitment.updateMany({
     where: { id: existing.id, revision: input.expectedRevision },
     data: {
@@ -471,6 +512,18 @@ export async function updateCommitment(input: {
     where: { id: existing.id },
     include: { _count: { select: { studySteps: true } } },
   });
+  if (scheduleChanged) {
+    const { notifyGuardiansOfPlanScheduleChanged } = await import(
+      "@/lib/plan-notifications"
+    );
+    await notifyGuardiansOfPlanScheduleChanged({
+      childId: child.id,
+      childDisplayName: child.displayName,
+      kind: "commitment",
+      recordId: fresh.id,
+      changeId: `r${fresh.revision}`,
+    });
+  }
   return toCommitmentView(fresh);
 }
 
@@ -557,6 +610,10 @@ export async function updateStudyStep(input: {
     );
   }
 
+  const prevPlanned = formatCalendarDate(existing.plannedDate);
+  const nextPlanned = formatCalendarDate(plannedDate);
+  const scheduleChanged = prevPlanned !== nextPlanned;
+
   const updated = await prisma.planStudyStep.updateMany({
     where: { id: existing.id, revision: input.expectedRevision },
     data: {
@@ -578,6 +635,18 @@ export async function updateStudyStep(input: {
   });
   const { syncStudyStepReminder } = await import("@/lib/reminder");
   await syncStudyStepReminder(fresh.id);
+  if (scheduleChanged) {
+    const { notifyGuardiansOfPlanScheduleChanged } = await import(
+      "@/lib/plan-notifications"
+    );
+    await notifyGuardiansOfPlanScheduleChanged({
+      childId: child.id,
+      childDisplayName: child.displayName,
+      kind: "study_step",
+      recordId: fresh.id,
+      changeId: `r${fresh.revision}`,
+    });
+  }
   return toStudyStepView(fresh);
 }
 
@@ -660,7 +729,9 @@ export async function setStudyStepStatus(input: {
     data: {
       status: input.status,
       ...(enteringDone ? { completedAt: new Date() } : {}),
-      ...(leavingDone ? { completedAt: null } : {}),
+      ...(leavingDone
+        ? { completedAt: null, completionReflection: "" }
+        : {}),
       revision: { increment: 1 },
     },
   });
@@ -673,6 +744,65 @@ export async function setStudyStepStatus(input: {
   });
   const { syncStudyStepReminder } = await import("@/lib/reminder");
   await syncStudyStepReminder(fresh.id);
+  if (enteringDone && fresh.completedAt) {
+    const { notifyGuardiansOfPlanStepCompleted } = await import(
+      "@/lib/plan-notifications"
+    );
+    await notifyGuardiansOfPlanStepCompleted({
+      childId: child.id,
+      childDisplayName: child.displayName,
+      studyStepId: fresh.id,
+      title: fresh.title,
+      completionEventId: `done:${fresh.id}:${fresh.completedAt.toISOString()}`,
+    });
+  }
+  return toStudyStepView(fresh);
+}
+
+export async function updateStudyStepCompletionReflection(input: {
+  childUserId: string;
+  id: string;
+  expectedRevision: number;
+  reflection: string;
+}) {
+  const child = await requireChildProfile(input.childUserId);
+  const existing = await prisma.planStudyStep.findFirst({
+    where: { id: input.id, childId: child.id },
+    include: stepInclude,
+  });
+  if (!existing) throw new PlanError("Kayıt bulunamadı.", "NOT_FOUND");
+  if (existing.status !== "DONE") {
+    throw new PlanError("Yalnızca tamamlanan adımlara not eklenebilir.", "VALIDATION");
+  }
+  if (existing.revision !== input.expectedRevision) {
+    throw new PlanError("Kayıt değişmiş. Yenileyip tekrar dene.", "CONFLICT");
+  }
+  const reflection = clampText(input.reflection, 1000);
+  const updated = await prisma.planStudyStep.updateMany({
+    where: {
+      id: existing.id,
+      revision: input.expectedRevision,
+      status: "DONE",
+    },
+    data: {
+      completionReflection: reflection,
+      revision: { increment: 1 },
+    },
+  });
+  if (updated.count !== 1) {
+    throw new PlanError("Kayıt değişmiş. Yenileyip tekrar dene.", "CONFLICT");
+  }
+  const fresh = await prisma.planStudyStep.findUniqueOrThrow({
+    where: { id: existing.id },
+    include: stepInclude,
+  });
+  const { touchPlanStepCompletionNotification } = await import(
+    "@/lib/plan-notifications"
+  );
+  await touchPlanStepCompletionNotification({
+    studyStepId: fresh.id,
+    hasReflection: Boolean(reflection),
+  });
   return toStudyStepView(fresh);
 }
 
@@ -720,9 +850,19 @@ export async function deleteCommitment(input: {
 
   await prisma.$transaction(async (tx) => {
     if (input.linkedSteps === "delete") {
+      const linked = await tx.planStudyStep.findMany({
+        where: { relatedCommitmentId: existing.id, childId: child.id },
+        select: { id: true },
+      });
       await tx.planStudyStep.deleteMany({
         where: { relatedCommitmentId: existing.id, childId: child.id },
       });
+      const { invalidateNotificationsForHref } = await import(
+        "@/lib/plan-notifications"
+      );
+      for (const step of linked) {
+        await invalidateNotificationsForHref(`/veli/plan/adim/${step.id}`);
+      }
     } else {
       await tx.planStudyStep.updateMany({
         where: { relatedCommitmentId: existing.id, childId: child.id },
@@ -731,6 +871,10 @@ export async function deleteCommitment(input: {
     }
     await tx.planCommitment.delete({ where: { id: existing.id } });
   });
+  const { invalidateNotificationsForHref } = await import(
+    "@/lib/plan-notifications"
+  );
+  await invalidateNotificationsForHref(`/veli/plan/is/${existing.id}`);
   return { ok: true as const };
 }
 
@@ -743,6 +887,10 @@ export async function deleteStudyStep(input: { childUserId: string; id: string }
   const { cancelStudyStepReminders } = await import("@/lib/reminder");
   await cancelStudyStepReminders(existing.id);
   await prisma.planStudyStep.delete({ where: { id: existing.id } });
+  const { invalidateNotificationsForHref } = await import(
+    "@/lib/plan-notifications"
+  );
+  await invalidateNotificationsForHref(`/veli/plan/adim/${existing.id}`);
   return { ok: true as const };
 }
 
@@ -927,4 +1075,51 @@ export async function getParentWeekPlan(parentUserId: string, weekStartIso?: str
     });
   }
   return { children: result };
+}
+
+async function requireParentChildAccess(parentUserId: string, childId: string) {
+  const access = await prisma.childGuardianAccess.findFirst({
+    where: { userId: parentUserId, childId, revokedAt: null },
+    include: { child: true },
+  });
+  if (!access) {
+    throw new PlanError("Bu plana erişimin yok.", "NOT_FOUND");
+  }
+  return access.child;
+}
+
+/** Read-only study step for an authorized guardian. */
+export async function getParentStudyStep(parentUserId: string, studyStepId: string) {
+  const row = await prisma.planStudyStep.findFirst({
+    where: { id: studyStepId },
+    include: { ...stepInclude, child: true },
+  });
+  if (!row) throw new PlanError("Kayıt bulunamadı.", "NOT_FOUND");
+  await requireParentChildAccess(parentUserId, row.childId);
+  return {
+    childDisplayName: row.child.displayName,
+    timeZone: row.child.timeZone,
+    studyStep: toStudyStepView(row),
+  };
+}
+
+/** Read-only commitment for an authorized guardian. */
+export async function getParentCommitment(parentUserId: string, commitmentId: string) {
+  const row = await prisma.planCommitment.findFirst({
+    where: { id: commitmentId },
+    include: { _count: { select: { studySteps: true } }, child: true },
+  });
+  if (!row) throw new PlanError("Kayıt bulunamadı.", "NOT_FOUND");
+  await requireParentChildAccess(parentUserId, row.childId);
+  const steps = await prisma.planStudyStep.findMany({
+    where: { relatedCommitmentId: commitmentId, childId: row.childId },
+    include: stepInclude,
+    orderBy: [{ plannedDate: "asc" }, { createdAt: "asc" }],
+  });
+  return {
+    childDisplayName: row.child.displayName,
+    timeZone: row.child.timeZone,
+    commitment: toCommitmentView(row),
+    studySteps: steps.map(toStudyStepView),
+  };
 }

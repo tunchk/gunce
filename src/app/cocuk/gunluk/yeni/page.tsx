@@ -11,7 +11,11 @@ export default async function NewJournalPage() {
   if (!child || child.onboardingStep !== "COMPLETE") redirect("/cocuk");
 
   return (
-    <Shell title="Günümü anlat" subtitle="Bir konu seç; istediğin kadar yaz, paylaşmak zorunda değilsin." withChildNav>
+    <Shell
+      title="Günümü anlat"
+      subtitle="Bir konu seç. Kaydettiklerini velilerin görebilir."
+      withChildNav
+    >
       <Panel>
         <NewEntryPromptPicker />
       </Panel>

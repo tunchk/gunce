@@ -43,7 +43,7 @@ test("journal → suggestions → select/confirm → Hafta → parent read-only"
 
   await openFreeJournal(page);
   await page.locator("#journal-body").fill(ACCEPTANCE_TEXT);
-  await page.getByRole("button", { name: "Kaydet (bende kalsın)" }).click();
+  await page.getByRole("button", { name: "Bitirdim" }).click();
   await expect(page.getByText("Kaydedildi")).toBeVisible({ timeout: 10_000 });
 
   // Pin diary date for relative resolution (Thu 10 Sep 2026).
@@ -53,7 +53,7 @@ test("journal → suggestions → select/confirm → Hafta → parent read-only"
     data: { diaryDate: parseCalendarDate("2026-09-10") },
   });
 
-  await page.getByRole("link", { name: "Planıma neler ekleyebilirim?" }).click();
+  await page.getByRole("button", { name: "Planıma neler ekleyebilirim?" }).click();
   await expect(page.getByRole("heading", { name: "Plan önerileri" })).toBeVisible({
     timeout: 15_000,
   });
@@ -88,10 +88,12 @@ test("journal → suggestions → select/confirm → Hafta → parent read-only"
   });
   await page.getByRole("link", { name: "Planımı gör" }).click();
 
-  await expect(page.getByText("Almanca kelime sınavı")).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByText("Almanca kelimelerine çalış")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Sınav.*Almanca kelime sınavı/ }),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page.getByRole("link", { name: /Almanca kelimelerine çalış/ }),
+  ).toBeVisible();
   await expect(page.getByText("Matematik ödevi")).toHaveCount(0);
 
   const parentCookie = await signInAndGetCookie(parent.email, parent.password);
@@ -99,10 +101,12 @@ test("journal → suggestions → select/confirm → Hafta → parent read-only"
   await parentCtx.addCookies(parseCookieHeader(parentCookie));
   const parentPage = await parentCtx.newPage();
   await parentPage.goto("/veli/plan");
-  await expect(parentPage.getByText("Almanca kelime sınavı")).toBeVisible({
+  await expect(parentPage.getByText("Almanca kelime sınavı").first()).toBeVisible({
     timeout: 15_000,
   });
-  await expect(parentPage.getByText("Almanca kelimelerine çalış")).toBeVisible();
+  await expect(
+    parentPage.getByText("Almanca kelimelerine çalış").first(),
+  ).toBeVisible();
   await expect(parentPage.getByText(ACCEPTANCE_TEXT)).toHaveCount(0);
   await expect(parentPage.getByText("Bunu nereden çıkardık")).toHaveCount(0);
   await expect(parentPage.getByRole("button", { name: /ekle|düzenle|sil/i })).toHaveCount(

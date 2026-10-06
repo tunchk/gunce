@@ -11,6 +11,7 @@ import {
   publishShare,
   withdrawShare,
   prisma,
+  markEntryLegacyPrivate,
 } from "./fixtures";
 
 test.beforeEach(async () => {
@@ -53,6 +54,7 @@ test("child shares selected content; parent sees only that; withdraw hides it", 
     promptKey: "FREE",
     body: "ÖZEL GÜNLÜK METNİ",
   });
+  await markEntryLegacyPrivate(entry.id);
   const draft = await updateSharingDraft({
     childUserId,
     entryId: entry.id,

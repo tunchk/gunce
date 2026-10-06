@@ -31,7 +31,12 @@ export function middleware(request: NextRequest) {
 
   const sessionCookie = hasSessionCookie(request);
 
-  if ((pathname.startsWith("/veli") || pathname.startsWith("/api/parent")) && !sessionCookie) {
+  if (
+    (pathname.startsWith("/veli") ||
+      pathname.startsWith("/api/parent") ||
+      pathname.startsWith("/api/notifications")) &&
+    !sessionCookie
+  ) {
     // Token pages must remain reachable without a session (email links).
     if (
       pathname.startsWith("/veli/eposta-dogrula") ||
@@ -68,6 +73,7 @@ export const config = {
     "/cocuk/:path*",
     "/api/parent/:path*",
     "/api/child/:path*",
+    "/api/notifications",
     "/api/auth/verify-email",
   ],
 };

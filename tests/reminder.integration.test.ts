@@ -356,4 +356,36 @@ describe("Reminders + Web Push (Milestone 7)", () => {
     await processDueReminders({ push });
     expect(push.sent.length).toBe(first);
   });
+
+  it("creates in-app reminder notifications without push subscriptions", async () => {
+    const { childUserId } = await setupChild("Europe/Berlin");
+    await updateReminderPreferences({
+      childUserId,
+      expectedRevision: 1,
+      journalReminderEnabled: true,
+      journalReminderLocalTime: "18:00",
+      studyRemindersEnabled: false,
+    });
+
+    setReminderNowForTests(() => new Date("2026-09-10T16:00:00.000Z")); // 18:00 Berlin
+    const result = await processDueReminders({
+      push: {
+        isConfigured: () => false,
+        async send() {
+          return { status: "gone" as const };
+        },
+      },
+    });
+    expect(result.sent + result.claimed).toBeGreaterThan(0);
+
+    const notes = await prisma.appNotification.findMany({
+      where: {
+        recipientUserId: childUserId,
+        kind: "REMINDER_JOURNAL",
+        invalidatedAt: null,
+      },
+    });
+    expect(notes.length).toBeGreaterThanOrEqual(1);
+    expect(notes[0]!.title).toContain("Günlük");
+  });
 });

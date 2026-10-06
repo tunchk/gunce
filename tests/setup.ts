@@ -62,6 +62,9 @@ beforeEach(async () => {
 
   await prisma.parentGuidance.deleteMany();
   await prisma.publishedShareRecipient.deleteMany();
+  await prisma.appNotification.deleteMany();
+  await prisma.journalAiJob.deleteMany();
+  await prisma.journalGuardianAi.deleteMany();
   await prisma.reminderDelivery.deleteMany();
   await prisma.reminderOccurrence.deleteMany();
   await prisma.reminderDayBucket.deleteMany();

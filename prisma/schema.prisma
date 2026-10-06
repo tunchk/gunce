@@ -43,6 +43,38 @@ enum JournalEntryStatus {
   SAVED
 }
 
+/// NEW entries are GUARDIAN_VISIBLE; pre-M11 rows are LEGACY_PRIVATE.
+enum JournalVisibility {
+  LEGACY_PRIVATE
+  GUARDIAN_VISIBLE
+}
+
+enum AppNotificationKind {
+  JOURNAL_GUARDIAN_VISIBLE
+  LEGACY_SHARE_PUBLISHED
+  REMINDER_JOURNAL
+  REMINDER_STUDY_STEP
+  PLAN_RECORD_CREATED
+  PLAN_SCHEDULE_CHANGED
+  PLAN_STEP_COMPLETED
+  PLAN_EXTRACT_BATCH
+}
+
+enum JournalAiJobStatus {
+  PENDING
+  CLAIMED
+  DONE
+  FAILED
+  CANCELLED
+}
+
+enum JournalGuardianAiStatus {
+  PENDING
+  READY
+  FAILED
+  STALE
+}
+
 enum SuggestionStatus {
   PENDING
   ACCEPTED
@@ -75,6 +107,7 @@ model User {
   guardianAccesses         ChildGuardianAccess[]
   createdGuardianInvites   GuardianInvitation[]  @relation("GuardianInviteCreator")
   shareRecipients          PublishedShareRecipient[]
+  appNotifications         AppNotification[]
 }
 
 model Session {
@@ -241,7 +274,7 @@ model RateLimitBucket {
   updatedAt   DateTime @updatedAt
 }
 
-/// Private writing owned exclusively by the child. Never returned by parent APIs.
+/// Journal writing. LEGACY_PRIVATE keeps M2–M10 privacy; GUARDIAN_VISIBLE is the M11 model.
 model JournalEntry {
   id              String             @id @default(cuid())
   childId         String
@@ -252,24 +285,100 @@ model JournalEntry {
   body            String             @default("")
   /// Preserved child-authored / reviewed text before accepting a summary.
   originalBody    String             @default("")
-  /// Last accepted AI summary text (private). Empty if none accepted.
+  /// Last accepted AI summary text (child-facing optional). Empty if none accepted.
   acceptedSummary String             @default("")
   status          JournalEntryStatus @default(DRAFT)
+  visibility      JournalVisibility  @default(GUARDIAN_VISIBLE)
   revision        Int                @default(1)
   /// Optional client key so create retries do not insert duplicates.
   clientRequestId String?            @unique
+  /// Set on first non-empty save that created guardian notifications (idempotency aid).
+  firstNotifiedAt DateTime?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
-  child       ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
-  draft       SharingDraft?
-  published   PublishedShare?
-  transcripts JournalTranscript[]
-  suggestions JournalSuggestion[]
+  child            ChildProfile          @relation(fields: [childId], references: [id], onDelete: Cascade)
+  draft            SharingDraft?
+  published        PublishedShare?
+  transcripts      JournalTranscript[]
+  suggestions      JournalSuggestion[]
   planExtractBatches PlanExtractBatch[]
+  guardianAi       JournalGuardianAi?
+  aiJobs           JournalAiJob[]
+  notifications    AppNotification[]
 
   @@index([childId, diaryDate])
   @@index([childId, updatedAt])
+  @@index([childId, visibility, updatedAt])
+}
+
+/// Durable AI summary + guardian guidance for GUARDIAN_VISIBLE entries (revision-keyed).
+model JournalGuardianAi {
+  id                 String                   @id @default(cuid())
+  entryId            String                   @unique
+  sourceRevision     Int
+  status             JournalGuardianAiStatus  @default(PENDING)
+  summaryText        String                   @default("")
+  conversationOpener String                   @default("")
+  supportAction      String                   @default("")
+  provider           String                   @default("")
+  lastError          String                   @default("")
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  entry JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+}
+
+/// Outbox job to generate/regenerate guardian AI for a specific entry revision.
+model JournalAiJob {
+  id             String            @id @default(cuid())
+  entryId        String
+  sourceRevision Int
+  status         JournalAiJobStatus @default(PENDING)
+  attemptCount   Int               @default(0)
+  claimToken     String?
+  claimedAt      DateTime?
+  claimExpiresAt DateTime?
+  lastError      String            @default("")
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  entry JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, sourceRevision])
+  @@index([status, createdAt])
+  @@index([claimExpiresAt])
+}
+
+/// In-app notification center item. One row per recipient; independent read state.
+model AppNotification {
+  id             String              @id @default(cuid())
+  recipientUserId String
+  kind           AppNotificationKind
+  /// Stable uniqueness for retries / concurrent saves.
+  uniquenessKey  String              @unique
+  /// Generic Turkish list copy — never a narrative excerpt.
+  title          String
+  body           String              @default("")
+  href           String
+  childId        String?
+  entryId        String?
+  shareId        String?
+  reminderOccurrenceId String?
+  readAt         DateTime?
+  /// Soft-hide when access revoked or target deleted.
+  invalidatedAt  DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  recipient User          @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  entry     JournalEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+
+  @@index([recipientUserId, invalidatedAt, createdAt])
+  @@index([recipientUserId, readAt, invalidatedAt])
+  @@index([entryId])
+  @@index([shareId])
+  @@index([childId, recipientUserId])
 }
 
 /// Text-only transcript of a voice capture. Audio is never stored.
@@ -488,6 +597,8 @@ model PlanStudyStep {
   status               PlanStudyStepStatus @default(TODO)
   /// Metadata only: set when entering DONE, cleared when leaving DONE. Not a second source of truth.
   completedAt          DateTime?
+  /// Child self-report after DONE. Cleared atomically with completedAt on reopen. Not proof of mastery.
+  completionReflection String               @default("")
   revision             Int                 @default(1)
   clientRequestId      String?             @unique
   createdAt            DateTime            @default(now())

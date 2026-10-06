@@ -554,14 +554,28 @@ export async function applyPlanExtractBatch(input: {
       existingApply.entry.revision,
       child.id,
     );
+    const createdCommitmentIds = view.candidates
+      .map((c) => c.appliedCommitmentId)
+      .filter((id): id is string => Boolean(id));
+    const createdStudyStepIds = view.candidates
+      .map((c) => c.appliedStudyStepId)
+      .filter((id): id is string => Boolean(id));
+    const createdCount = createdCommitmentIds.length + createdStudyStepIds.length;
+    if (createdCount > 0) {
+      const { notifyGuardiansOfPlanExtractBatch } = await import(
+        "@/lib/plan-notifications"
+      );
+      await notifyGuardiansOfPlanExtractBatch({
+        childId: child.id,
+        childDisplayName: child.displayName,
+        applyRequestId,
+        createdCount,
+      });
+    }
     return {
       batch: view,
-      createdCommitmentIds: view.candidates
-        .map((c) => c.appliedCommitmentId)
-        .filter((id): id is string => Boolean(id)),
-      createdStudyStepIds: view.candidates
-        .map((c) => c.appliedStudyStepId)
-        .filter((id): id is string => Boolean(id)),
+      createdCommitmentIds,
+      createdStudyStepIds,
       skippedCandidateIds: view.candidates
         .filter((c) => c.status === "SKIPPED")
         .map((c) => c.id),
@@ -814,6 +828,7 @@ export async function applyPlanExtractBatch(input: {
           relatedCommitmentId,
           allowAfterDeadline: sel.allowAfterDeadline === true,
           clientRequestId,
+          suppressGuardianNotify: true,
         });
         createdStudyStepIds.push(step.id);
         await prisma.planExtractCandidate.update({
@@ -869,6 +884,7 @@ export async function applyPlanExtractBatch(input: {
           eventDate,
           dateUnknown,
           clientRequestId,
+          suppressGuardianNotify: true,
         });
         createdCommitmentIds.push(commitment.id);
         newlyCreatedByCandidateId.set(cand.id, commitment.id);
@@ -930,6 +946,18 @@ export async function applyPlanExtractBatch(input: {
     include: { ...batchInclude, entry: { select: { revision: true } } },
   });
   const view = await toBatchView(fresh, fresh.entry.revision, child.id);
+  const createdCount = createdCommitmentIds.length + createdStudyStepIds.length;
+  if (createdCount > 0) {
+    const { notifyGuardiansOfPlanExtractBatch } = await import(
+      "@/lib/plan-notifications"
+    );
+    await notifyGuardiansOfPlanExtractBatch({
+      childId: child.id,
+      childDisplayName: child.displayName,
+      applyRequestId,
+      createdCount,
+    });
+  }
   return {
     batch: view,
     createdCommitmentIds,

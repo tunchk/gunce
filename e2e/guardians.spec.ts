@@ -89,6 +89,8 @@ test.describe("Milestone 10 — multi-guardian", () => {
       childUserId,
       body: "gizli",
     });
+    const { markEntryLegacyPrivate } = await import("./fixtures");
+    await markEntryLegacyPrivate(entry.id);
     const draft = await updateSharingDraft({
       childUserId,
       entryId: entry.id,

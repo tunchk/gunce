@@ -90,13 +90,19 @@ Tamamlanma zaman damgası (metadata): `20260910200000_study_step_completed_at_me
 Uzun vadeli hedefler: `20260910210000_plan_goals`.  
 Günlükten plan önerileri: `20260910220000_plan_extract`.  
 Hatırlatmalar / Web Push: `20260911100000_reminders_web_push`.  
-Çoklu veli / paylaşım alıcıları: `20260911120000_multi_guardian_audiences`.
+Çoklu veli / paylaşım alıcıları: `20260911120000_multi_guardian_audiences`.  
+Veli görünürlüğü + bildirim merkezi (M11): `20260913120000_m11_guardian_visible_notifications`.  
+Plan yansıması + plan bildirimleri (M11.1): `20260913160000_m111_plan_reflection_notifications`.
 
 ```bash
 npm run typecheck
 npm run build
 npm test
-npm run reminders:process          # yerel zamanlayıcı (VAPID + DB gerekir)
+npm run dev                       # Next.js + sürekli jobs:worker (yerel)
+npm run dev:app                    # yalnızca Next.js
+npm run jobs:process               # tek seferlik hatırlatma + günlük AI işleri
+npm run jobs:worker                # sürekli yerel worker döngüsü
+npm run reminders:process          # yalnızca hatırlatmalar (eski komut; hâlâ geçerli)
 npm run build && npm run test:e2e  # Playwright; Chromium gerekir (next start güncel build ister)
 ```
 
@@ -106,25 +112,32 @@ npm run build && npm run test:e2e  # Playwright; Chromium gerekir (next start g�
 2. `REMINDER_SCHEDULER_SECRET` ayarla (en az 16 karakter).
 3. Çocuk: **Hatırlatmalar** → tercihleri aç → **Bu cihazda bildirimleri aç** (HTTPS veya localhost).
 4. **Deneme bildirimi gönder** (kabul ≠ ekranda görünme garantisi).
-5. Yerel işleyici: `npm run reminders:process` veya harici cron → `POST /api/internal/reminders/process` + Bearer secret.
-6. Gelecek barındırma: periyodik scheduler (1–5 dk), HTTPS, VAPID, secret; hosting bu kilometre taşında provision edilmez.
+5. Yerel işleyici: `npm run dev` (worker dahil) veya `npm run jobs:process` / cron → `POST /api/internal/jobs/process` veya `/api/internal/reminders/process` + Bearer secret.
+6. Uygulama içi bildirim merkezi push izni veya VAPID olmadan da hatırlatma öğesi oluşturur; Web Push ayrı bir kanaldır.
+7. Gelecek barındırma: periyodik scheduler (1–5 dk), HTTPS, VAPID, secret; hosting bu kilometre taşında provision edilmez.
 
 **Manuel gerçek cihaz (HTTPS) kontrol listesi:** aç → deneme bildirimi → uygulamayı kapat → zamanlanmış hatırlatmayı tetikle → adımı tamamla/ertele → eski hatırlatmanın gelmediğini doğrula → oturumu iptal et → yeni gönderim olmasın. Localhost bunu kanıtlamaz.
 
+### Veli görünürlüğü (Milestone 11) + güvenilir AI (Milestone 11.1)
+
+- Yeni günlük kayıtları kaydedilince aktif veliler tam anlatımı okur; yayın / alıcı seçimi yok.
+- Eski (`LEGACY_PRIVATE`) kayıtlar önceki gizlilik sözünü korur; onaylı paylaşımlar eskisi gibi çalışır.
+- Veli: zil → bildirim merkezi; detay `/veli/gunluk/[entryId]`.
+- Yerel AI: **`npm run dev`** (uygulama + worker). Tek seferlik: `npm run jobs:process`. Worker `.env` / `.env.local` yükler.
+- Parent detay: kuyruk / işleniyor / başarısız / yok / hazır; otomatik yenileme; yeniden dene.
+- Plan: tamamlama notu (`completionReflection`); veli `/veli/plan/adim/[id]`; plan oluşturma/tarih/tamamlama ve gruplu extract bildirimleri.
 ## Manuel deneme (ayrı oturumlar)
 
 1. Veli kaydı → çocuk profili → davet kodu.
 2. Ayrı profil/cihazda çocuk eşleştirmesi ve onboarding.
-3. Çocuk: **Günümü anlat** → konu seç → yaz (veya mikrofon; `OPENAI_API_KEY` gerekir). Uzun anlatımda her bölüm ~120 sn; uyarıdan sonra **Devam et** / **Bitirdim**. Çözümü gözden geçir → **Yazımı toparla** → öneriyi düzenle/kabul et → **Kaydet (bende kalsın)**.
-4. İstersen **Paylaşımı hazırla** → **Özetimden kopyala** → önizle → **Paylaş** (otomatik paylaşılmaz).
-5. Veli ana ekranında yalnızca yayınlanan anlık görüntüyü gör; özel metin / transkript / öneri görünmez.
-6. **Paylaşımı geri çek** → velinin uygulamada görmesi durur; daha önce okunan bilgi geri alınamaz.
-7. Çocuk: **Plan ekle** → örn. Cuma “Almanca kelime sınavı” → Çarşamba/Perşembe hazırlık adımları → **Tamamladım** / **Başka güne taşı**. Sınav tarihi değişmez.
-8. **Planım** (`/cocuk/haftam`) içinde **Hafta** / **Pano** görünümleri; panoda **Başla** → **Tamamladım**. Aynı adımlar her iki görünümde. Alt gezinti: Ana · Günlüğüm · Planım · Hedeflerim.
-9. Veli: ana ekranda paylaşımlar önce; **Haftanın planı** salt okunur; planı düzenleyemez. Plan API’leri günlük metni taşımaz.
-10. Çocuk: **Hedeflerim** → hedef + adımlar; panoda tamamla → ilerleme güncellenir. Veli **Hedefler** salt okunur.
-11. Hatırlatmalar: çocuk **Ayarlar** → Hatırlatmalar (ana akışın dışında).
-12. Veli: kayıt sonrası doğrulama e-postası (isteğe bağlı); **Şifremi unuttum** → yenileme. Yerel: `GUNCE_MAIL_PREVIEW=1` ile `.mail-preview/` dosyalarını aç.
+3. Çocuk: **Günümü anlat** → konu seç → yaz (veya mikrofon; `OPENAI_API_KEY` gerekir). Kaydet → “Kaydedildi · Velilerin görebilir”. **Bitirdim** yayın değildir.
+4. Veli: bildirim zili → okunmamış → tam anlatımı `/veli/gunluk/...` içinde gör. Yayın / alıcı seçimi yok.
+5. Eski (legacy) kayıtlar için çocuk hâlâ **Paylaşımı hazırla** akışını kullanabilir; özel metin paylaşılmadan görünmez.
+6. İkinci veli davetini kabul et → yeni-model geçmişi okuyabilir; eski özel metin ve tarihsel bildirim seli yok.
+7. Çocuk: **Plan ekle** → başarı ekranında kayda git. Alt gezinti: Ana · Günlüğüm · Planım · Hedeflerim (bildirim zili ana/ayarlarda).
+8. Veli ana: son günlükler + onaylı legacy paylaşımlar (aynı kaynak için tek kart).
+9. Hatırlatmalar: çocuk **Ayarlar** → Hatırlatmalar; uygulama içi merkez push olmadan da öğe gösterebilir.
+10. Veli: kayıt sonrası doğrulama e-postası (isteğe bağlı); **Şifremi unuttum** → yenileme. Yerel: `GUNCE_MAIL_PREVIEW=1` ile `.mail-preview/` dosyalarını aç.
 
 ### Mikrofon (manuel kontrol listesi)
 

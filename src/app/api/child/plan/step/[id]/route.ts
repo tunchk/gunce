@@ -8,6 +8,7 @@ import {
   setStudyStepStatus,
   STUDY_STEP_STATUSES,
   updateStudyStep,
+  updateStudyStepCompletionReflection,
   type StudyStepStatus,
 } from "@/lib/plan";
 import { clientIpFromHeaders, consumeRateLimit } from "@/lib/rate-limit";
@@ -160,6 +161,22 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
         id,
         expectedRevision: body.expectedRevision,
         status,
+      });
+      return NextResponse.json({ studyStep }, { headers: NO_STORE });
+    }
+
+    if (body.op === "set_reflection") {
+      if (typeof body.expectedRevision !== "number") {
+        return NextResponse.json(
+          { error: "expectedRevision gerekli." },
+          { status: 400, headers: NO_STORE },
+        );
+      }
+      const studyStep = await updateStudyStepCompletionReflection({
+        childUserId: authz.session!.user.id,
+        id,
+        expectedRevision: body.expectedRevision,
+        reflection: typeof body.reflection === "string" ? body.reflection : "",
       });
       return NextResponse.json({ studyStep }, { headers: NO_STORE });
     }
