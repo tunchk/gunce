@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { HelpRequestStatusChip } from "@/components/help-child-actions";
 import { CommitmentEditor } from "@/components/plan-editors";
-import { Panel, Shell } from "@/components/ui";
+import { Button, Panel, Shell } from "@/components/ui";
+import { getActiveHelpForPlanItem } from "@/lib/help";
 import { getCommitment, PlanError } from "@/lib/plan";
 import { getAppSession, getChildProfileForUser } from "@/lib/session";
 
@@ -26,6 +28,11 @@ export default async function CommitmentDetailPage({
     throw error;
   }
 
+  const help = await getActiveHelpForPlanItem({
+    childUserId: session.user.id,
+    commitmentId: id,
+  });
+
   return (
     <Shell title={data.commitment.title} subtitle="Ödev, sınav veya etkinliği düzenle." withChildNav>
       <div className="space-y-4">
@@ -35,6 +42,31 @@ export default async function CommitmentDetailPage({
             studySteps={data.studySteps}
           />
         </Panel>
+
+        <Panel>
+          <h2 className="text-lg font-semibold">Yardım</h2>
+          {help ? (
+            <div className="mt-3 space-y-3">
+              <HelpRequestStatusChip statusLabel={help.statusLabel} />
+              <Link href={`/cocuk/yardim/${help.id}`} className="block">
+                <Button variant="secondary">Yardım isteğine bak</Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-3">
+              <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+                İstersen velinden yardım isteyebilirsin.
+              </p>
+              <Link
+                href={`/cocuk/yardim/yeni?commitmentId=${data.commitment.id}`}
+                className="block"
+              >
+                <Button variant="secondary">Yardım iste</Button>
+              </Link>
+            </div>
+          )}
+        </Panel>
+
         <Link
           href="/cocuk/haftam"
           className="inline-flex min-h-12 items-center text-sm font-semibold underline"

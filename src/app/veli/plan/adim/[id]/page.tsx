@@ -58,18 +58,9 @@ export default async function ParentStudyStepPage({
             </p>
           ) : null}
           {step.status === "DONE" ? (
-            <div className="mt-4 rounded-2xl border p-3" style={{ borderColor: "var(--line)" }}>
-              <p className="text-sm font-semibold">Çocuğun notu</p>
-              {step.completionReflection ? (
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
-                  {step.completionReflection}
-                </p>
-              ) : (
-                <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
-                  Bu tamamlamada not yok.
-                </p>
-              )}
-            </div>
+            <p className="mt-4 text-sm" style={{ color: "var(--muted)" }}>
+              Tamamlandı. Çocuğun yazdığı tamamlanma notu yalnızca kendisine özeldir.
+            </p>
           ) : null}
           <p className="mt-4 text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
             Bu ekran salt okunur. Düzenleme çocuğa aittir.

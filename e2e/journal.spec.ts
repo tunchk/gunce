@@ -91,7 +91,7 @@ test("child shares selected content; parent sees only that; withdraw hides it", 
   const childPage = await childCtx.newPage();
   await childPage.goto("/cocuk/ana");
   await expect(childPage).toHaveURL(/\/cocuk\/ana/);
-  await expect(childPage.getByRole("link", { name: "Günümü anlat" })).toBeVisible();
+  await expect(childPage.getByRole("link", { name: "Günlüğüm" })).toBeVisible();
 
   await parentCtx.close();
   await childCtx.close();

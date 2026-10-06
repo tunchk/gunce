@@ -29,6 +29,7 @@ import {
 } from "@/lib/plan";
 import {
   createParent,
+  markEntryGuardianVisible,
   onboardParentWithChild,
   pairChildAndGetCookie,
   prisma,
@@ -94,6 +95,7 @@ describe("Milestone 11.1 AI / reflection / plan notifications", () => {
     ).userId!;
 
     let entry = await createJournalEntry({ childUserId, body: "" });
+    await markEntryGuardianVisible(entry.id);
     entry = await updateJournalBody({
       childUserId,
       entryId: entry.id,
@@ -142,6 +144,7 @@ describe("Milestone 11.1 AI / reflection / plan notifications", () => {
     ).userId!;
 
     let entry = await createJournalEntry({ childUserId, body: "" });
+    await markEntryGuardianVisible(entry.id);
     entry = await updateJournalBody({
       childUserId,
       entryId: entry.id,
@@ -199,7 +202,9 @@ describe("Milestone 11.1 AI / reflection / plan notifications", () => {
     expect(withNote.completionReflection).toContain("10 soru");
 
     const parentView = await getParentStudyStep(parent.user.id, step.id);
-    expect(parentView.studyStep.completionReflection).toContain("zorlandım");
+    expect(parentView.studyStep.status).toBe("DONE");
+    expect(parentView.studyStep.completionReflection).toBe("");
+    expect(JSON.stringify(parentView)).not.toContain("zorlandım");
 
     const reopened = await setStudyStepStatus({
       childUserId,

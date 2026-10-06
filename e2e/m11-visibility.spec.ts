@@ -9,18 +9,20 @@ import {
   parseCookieHeader,
   prisma,
   markEntryLegacyPrivate,
+  markEntryGuardianVisible,
   createJournalEntry,
   updateSharingDraft,
   publishShare,
 } from "./fixtures";
 import { updateJournalBody } from "../src/lib/journal";
+import { notifyGuardiansOfVisibleEntry } from "../src/lib/notifications";
 
-test.describe("Milestone 11 — guardian visibility + notifications", () => {
+test.describe("M12A — private default + historical GUARDIAN_VISIBLE", () => {
   test.beforeEach(async () => {
     await wipe();
   });
 
-  test("child save → independent guardian unread; no publish; legacy private", async ({
+  test("new save is private; historical visible still works for guardians", async ({
     browser,
   }) => {
     const password = "Password123!";
@@ -77,24 +79,49 @@ test.describe("Milestone 11 — guardian visibility + notifications", () => {
       recipientUserIds: [manager.user.id],
     });
 
-    let entry = await createJournalEntry({
+    let privateEntry = await createJournalEntry({
       childUserId,
       body: "",
-      clientRequestId: `m11-shell-${randomBytes(2).toString("hex")}`,
+      clientRequestId: `m12-shell-${randomBytes(2).toString("hex")}`,
     });
+    privateEntry = await updateJournalBody({
+      childUserId,
+      entryId: privateEntry.id,
+      body: "Özel yeni kayıt parkta.",
+      expectedRevision: privateEntry.revision,
+      markSaved: true,
+    });
+    expect(privateEntry.visibility).toBe("LEGACY_PRIVATE");
     expect(
       await prisma.appNotification.count({
-        where: { entryId: entry.id, invalidatedAt: null },
+        where: { entryId: privateEntry.id, invalidatedAt: null },
       }),
     ).toBe(0);
 
-    entry = await updateJournalBody({
+    let entry = await createJournalEntry({
       childUserId,
-      entryId: entry.id,
       body: "Bugün parkta yağmur vardı.",
-      expectedRevision: entry.revision,
-      markSaved: true,
+      clientRequestId: `m11-hist-${randomBytes(2).toString("hex")}`,
     });
+    await markEntryGuardianVisible(entry.id);
+    const childRow = await prisma.childProfile.findUniqueOrThrow({
+      where: { id: child.id },
+    });
+    await notifyGuardiansOfVisibleEntry({
+      entryId: entry.id,
+      childId: child.id,
+      childDisplayName: childRow.displayName,
+    });
+    await prisma.journalEntry.update({
+      where: { id: entry.id },
+      data: { firstNotifiedAt: new Date() },
+    });
+    entry = await prisma.journalEntry.findUniqueOrThrow({ where: { id: entry.id } }).then(
+      async () => {
+        const { getChildEntry } = await import("../src/lib/journal");
+        return getChildEntry(childUserId, entry.id);
+      },
+    );
     expect(entry.visibility).toBe("GUARDIAN_VISIBLE");
     expect(
       await prisma.appNotification.count({
@@ -111,13 +138,22 @@ test.describe("Milestone 11 — guardian visibility + notifications", () => {
     const childPage = await childCtx.newPage();
     await childPage.setViewportSize({ width: 360, height: 740 });
 
-    await childPage.goto(`/cocuk/gunluk/${entry.id}`);
+    await childPage.goto(`/cocuk/gunluk/${privateEntry.id}`);
     await expect(
-      childPage.getByText("Buraya kaydettiklerini velilerin görebilir.", {
+      childPage.getByText("Yazın özel kalır. Paylaşmak istersen açık onay verirsin.", {
         exact: true,
       }),
     ).toBeVisible();
-    await expect(childPage.getByText("Paylaşımı hazırla")).toHaveCount(0);
+    await expect(
+    childPage.getByText("Paylaşımı hazırla", { exact: true }),
+  ).toBeVisible();
+
+    await childPage.goto(`/cocuk/gunluk/${entry.id}`);
+    await expect(
+      childPage.getByText("Bu eski kayıt velilerin görebilir modelinde.", {
+        exact: true,
+      }),
+    ).toBeVisible();
 
     await childPage.goto("/cocuk/bildirimler");
     await expect(childPage.getByText(/veliye yanıt|görev gönder/i)).toHaveCount(0);
@@ -138,6 +174,9 @@ test.describe("Milestone 11 — guardian visibility + notifications", () => {
     const mgrPage = await mgrCtx.newPage();
     await mgrPage.setViewportSize({ width: 1280, height: 800 });
 
+    await mgrPage.goto(`/veli/gunluk/${privateEntry.id}`);
+    await expect(mgrPage.getByText("Özel yeni kayıt parkta.")).toHaveCount(0);
+
     await mgrPage.goto("/veli/bildirimler");
     await expect(mgrPage.getByText(/gününü anlattı/i)).toBeVisible();
     await expect(mgrPage.getByText("ESKI_OZEL_METIN_ASLA")).toHaveCount(0);
@@ -149,8 +188,7 @@ test.describe("Milestone 11 — guardian visibility + notifications", () => {
     await invCtx.addCookies(parseCookieHeader(inviteeCookie));
     const invPage = await invCtx.newPage();
     await invPage.goto("/veli/bildirimler");
-    await invPage.getByRole("button", { name: "Yeni" }).click();
-    await expect(invPage.getByText(/gününü anlattı/i)).toBeVisible();
+    await expect(invPage.getByText(/gününü anlattı/i).first()).toBeVisible();
 
     await updateJournalBody({
       childUserId,

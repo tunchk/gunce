@@ -183,7 +183,7 @@ test("authenticated layouts at 360px and desktop (screenshots)", async ({ browse
     await page.getByRole("button", { name: "Kaydet" }).click();
     await expect(page.getByText(/Kaydedildi/)).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: "Haftalık plana git" }).click();
-    await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible({ timeout: 15_000 });
 
     await page.goto("/cocuk/ana");
     await expect(
@@ -231,7 +231,7 @@ test("authenticated layouts at 360px and desktop (screenshots)", async ({ browse
       path: path.join(outDir, `${label}-plan-week.png`),
       fullPage: true,
     });
-    await page.getByRole("tab", { name: "Pano" }).click();
+    await page.getByRole("link", { name: "Duruma göre (Pano)" }).click();
     await expect(
       page.getByText(/Yapılacak: uzun|Yapıyorum: İngilizce|Tamamlandı: fen|Gecikmiş açık/).first(),
     ).toBeVisible();

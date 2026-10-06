@@ -174,72 +174,114 @@ Presentation and navigation polish only — no new domain features.
 
 **Out of scope for Milestone 10:** legal guardianship docs, custody workflows, manager transfer, parent plan edits, production email provider.
 
-## Milestone 11 — Direct guardian visibility & notification center (current)
+## Milestone 12A — Child-first UX + privacy reset (current)
 
 **Status: implemented in this repository.**
 
-Intentional product change for **new** journal entries:
+Approved product decisions (K):
 
-- When a child saves a non-empty entry, all currently authorized guardians can read the **full saved narrative**
-- No publish button, sharing draft, recipient picker, or guardian-message composition for new entries
-- AI summary + guardian support guidance supplement the narrative; they never replace access to it
-- Guardians cannot send messages, replies, tasks, or acknowledgments to the child
-- Notice in the editor: “Buraya kaydettiklerini velilerin görebilir.”
+1. New journals are **child-private by default**; parents see narrative only after explicit child share.
+2. Future Help: child chooses among guardian offers (**M12B**).
+3. Board stays available but is demoted from default week navigation.
+4. Goals stay implemented but leave primary child navigation for the pilot.
+5. Free-text completion reflections are **child-private**; parents see DONE status only.
 
-**Visibility modes**
+**Child UX**
+
+- Primary nav: **Bugün · Ekle · Haftam** (`/cocuk/ana`, `/cocuk/plan/yeni`, `/cocuk/haftam`)
+- Bugün: next step / today / approaching from existing plan data; journal + goals as secondary links
+- Haftam: week calendar by default; Pano via secondary “Duruma göre” link
+- Journal editor + extract + goals routes preserved off primary nav
+
+**Journal privacy**
+
+- New creates use `LEGACY_PRIVATE` (enum reused; no destructive rewrite of historical rows)
+- Historical `GUARDIAN_VISIBLE` rows keep M11 semantics (parent body access, AI, notify-once)
+- Parent home is plan-first; no journal-feed hero; approved share snapshots remain listed
+- Parent AI guidance / `JournalAiJob` enqueue only for `GUARDIAN_VISIBLE`
+
+**Completion reflections**
+
+- Child can write them; parent plan APIs/views strip `completionReflection`
+
+**Out of scope for M12A:** Family Calendar (M13). Help shipped in M12B.
+
+## Milestone 12B — Child-initiated help workflow (current)
+
+**Status: implemented in this repository.**
+
+Principle: **the child owns the plan; the parent supports when explicitly invited.**
+
+**Lifecycle**
+
+1. Child opens a plan item → **Yardım iste** → chooses type (Birlikte yapalım / Bana anlatır mısın? / Kontrol eder misin? / Başka) + optional short note.
+2. Active guardians see the request in `/veli/yardim` and may offer a date/time (**Yardım edebilirim** → **Öner**).
+3. Multiple guardians may offer; **the child chooses one** (no first-wins).
+4. Acceptance schedules a derived help session (from the accepted offer) — visible on Bugün/Haftam and parent Yardım, not a separate Family Calendar model.
+5. Child may cancel or mark completed; guardian may withdraw an unaccepted offer.
+
+**No chat.** Structured coordination only. No journal body, AI summaries, or completion reflections in help APIs/notifications.
+
+**Routes:** `/cocuk/yardim`, `/cocuk/yardim/yeni`, `/cocuk/yardim/[id]`, `/veli/yardim`, `/veli/yardim/[id]` (secondary; primary child nav unchanged).
+
+**Out of scope for M12B:** Family Calendar aggregation (M13), email/push, gamification.
+
+## Milestone 12B.1 — Help lifecycle hardening (current)
+
+**Status: implemented in this repository.**
+
+Hardens the M12B help workflow when schedules change or a guardian can no longer help.
+
+**Lifecycle additions**
+
+1. Guardian may **edit** own `PENDING` offer (date/time only) before acceptance.
+2. Guardian may **withdraw** own `PENDING` offer → `WITHDRAWN`; request → `OPEN` if no pending left, else stays `OFFERED`.
+3. Guardian whose offer was **accepted** may cancel their session (**Bu yardıma gelemeyeceğim**): accepted offer → `WITHDRAWN`, `acceptedOfferId` cleared, request → `OFFERED` or `OPEN`. Does **not** cancel the `HelpRequest` (child cancel still does).
+4. Sibling offers remain `PENDING` after accept so the child can pick another if the accepted guardian withdraws.
+5. If the linked study step / commitment **planned date** changes while help is `ACCEPTED`, the accepted offer is withdrawn and the request reopens (`OFFERED`/`OPEN`) — no silently stale session on Bugün/Haftam.
+
+**Notifications (minimal):** `HELP_OFFER_UPDATED`, `HELP_OFFER_WITHDRAWN`, `HELP_ACCEPTED_CANCELLED`, `HELP_REQUEST_REOPENED`. Still no journal/AI/reflection content.
+
+**Out of scope:** Family Calendar (M13), chat, availability model, conflict engine.
+
+## Milestone 11 — Direct guardian visibility & notification center (historical)
+
+**Status: shipped; partially superseded by M12A for new creates.**
+
+M11 introduced `GUARDIAN_VISIBLE` full-narrative access for new saves. **M12A reverses the default for new creates** to child-private. Existing `GUARDIAN_VISIBLE` rows are preserved without migration rewrite.
 
 | Mode | Who | Notes |
 |------|-----|-------|
-| `LEGACY_PRIVATE` | Pre-M11 entries (migrated) | Original private narrative; approved `PublishedShare` snapshots + recipient rules still work |
-| `GUARDIAN_VISIBLE` | New entries | Created server-side; no `SharingDraft`/`PublishedShare`; active `ChildGuardianAccess` determines read access |
+| `LEGACY_PRIVATE` | New creates (M12A) + pre-M11 private | Share draft/snapshot path; body never parent-readable without publish |
+| `GUARDIAN_VISIBLE` | Historical M11-only | Full saved body for active guardians; no new creates |
 
-New-model history follows **current** active access: a newly accepted guardian can read it; a removed guardian cannot. Joining does **not** flood historical notifications.
+Notifications / AI for `GUARDIAN_VISIBLE` remain as in M11 for those historical rows.
 
-**Notifications**
-
-- Database-backed in-app center for both roles (bell, Yeni/Tümü, pagination, per-recipient read, mark all read)
-- First successful non-empty save → one notification per active guardian (deduped by uniqueness key; autosaves do not duplicate or reset read)
-- Child center: existing journal/study reminders (no push/VAPID required for in-app delivery)
-- Generic list copy only (no narrative excerpts)
-
-**AI**
-
-- Durable revision-keyed jobs (`JournalAiJob`); process with `npm run jobs:process`
-- Does not block save; stale revisions cannot overwrite current output
-
-**Out of scope for Milestone 11:** guardian push/email delivery, WebSockets, consent wizard, guardian replies.
-
-## Milestone 11.1 — Reliable AI, planning UX, reflection & plan notifications (current)
+## Milestone 11.1 — Reliable AI, planning UX, reflection & plan notifications
 
 **Status: implemented in this repository.**
 
-Builds on Milestone 11 guardian visibility without adding chat, guardian→child messages, or assigned tasks.
+Builds on Milestone 11 without chat or guardian→child messages.
 
 **AI processing**
 
-- Root cause of stuck “hazırlanıyor”: jobs stayed `PENDING` because plain `next`/`dev:app` never ran a worker, and one-shot `jobs:process` previously missed `.env.local` keys.
-- Local: `npm run dev` starts Next.js + continuous `jobs:worker` together (poll loop, no overlapping ticks, SIGINT/SIGTERM exit).
-- Keep `npm run jobs:process` as one-shot. Production still needs an external scheduler/worker.
-- Honest parent UI states: queued / processing / failed / unavailable / ready; rate-limited retry; bounded polling while detail is visible.
+- Local: `npm run dev` starts Next.js + continuous `jobs:worker`
+- Honest parent UI states for historical guardian AI
 
 **Planning UI**
 
-- Wider plan shell (`planWide`); Pano uses container-width tabs vs three columns (not viewport-only).
-- Neutral week heading for exams/events; no duplicate dates; shared status badges (Yapılacak / Yapıyorum / Tamamlandı + overdue date warning).
+- Wider plan shell; shared status badges
 
 **Completion reflection**
 
-- Optional “Neler yaptın?” after DONE; skip/failure does not undo completion.
-- Stored on `PlanStudyStep.completionReflection`; cleared with `completedAt` on reopen; guardians with access can read on `/veli/plan/adim/[id]`.
-- Voice reflection not wired this milestone (typed only).
+- Optional “Neler yaptın?” after DONE (child-private as of M12A)
+- Cleared with `completedAt` on reopen
 
 **Plan notifications**
 
-- Kinds: `PLAN_RECORD_CREATED`, `PLAN_SCHEDULE_CHANGED`, `PLAN_STEP_COMPLETED`, `PLAN_EXTRACT_BATCH`.
-- Extract apply → one grouped notification per guardian; no per-item duplicates for that apply.
-- Deduped uniqueness keys; removal invalidates; reflection updates completion notification body without a new item or read reset.
+- Kinds: `PLAN_RECORD_CREATED`, `PLAN_SCHEDULE_CHANGED`, `PLAN_STEP_COMPLETED`, `PLAN_EXTRACT_BATCH`
 
-**Out of scope:** push/email for plan events, chat, hosting, time-window batching of unrelated edits.
+**Out of scope:** push/email for plan events, chat, hosting.
 
 ## Design principles
 
@@ -247,7 +289,7 @@ Builds on Milestone 11 guardian visibility without adding chat, guardian→child
 - Never trust client-supplied `familyId`, `childId`, or role as authorization evidence
 - No role-switch control that lets a child enter the parent area
 - Minimize data collected (no exact birth date, school name, or home address in onboarding)
-- **New** journal entries (`GUARDIAN_VISIBLE`) are readable by active guardians after save; **legacy** private text (`LEGACY_PRIVATE`) is never exposed without an approved share snapshot
+- **New** journal entries are child-private (`LEGACY_PRIVATE`); parents see narrative only via approved share snapshots. Historical `GUARDIAN_VISIBLE` remains readable to active guardians
 - All user-facing interface text in Turkish
 - Mobile-first, large touch targets, accessible forms
 - Do not claim external provider retention policies unless independently verified

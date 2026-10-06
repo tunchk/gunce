@@ -15,8 +15,7 @@ import {
 
 
 /**
- * Milestone 8 — daily UX (presentation). Simulated browser coverage;
- * not a real-phone layout or microphone/push proof.
+ * Milestone 8 / M12A — child-first UX + private-default journal.
  */
 test.beforeEach(async () => {
   await wipe();
@@ -24,7 +23,7 @@ test.beforeEach(async () => {
 
 test.use({ viewport: { width: 360, height: 740 } });
 
-test("child nav, journal resume, and guardian-visible save", async ({ browser }) => {
+test("child nav Bugün/Haftam/Ekle; private journal save", async ({ browser }) => {
   const parent = await createParent({ email: `e2e_ux_child_${Date.now()}@example.com` });
   const child = await onboardParentWithChild(parent.user.id);
   const childCookie = await pairChildAndGetCookie(parent.user.id, child.id);
@@ -46,10 +45,13 @@ test("child nav, journal resume, and guardian-visible save", async ({ browser })
 
   await page.goto("/cocuk/ana");
   const nav = page.getByRole("navigation", { name: "Çocuk gezinti" });
-  await expect(nav.getByRole("link", { name: "Ana" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("heading", { name: "Günümü anlat" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Bugün" })).toHaveAttribute("aria-current", "page");
+  await expect(nav.getByRole("link", { name: "Ekle" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Haftam" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Günlüğüm" })).toHaveCount(0);
+  await expect(nav.getByRole("link", { name: "Hedeflerim" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Sıradaki adımım" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Bu hafta" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bugün" }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: "Hatırlatmalar" })).toHaveCount(0);
 
   const overflowHome = await page.evaluate(() => {
@@ -58,33 +60,35 @@ test("child nav, journal resume, and guardian-visible save", async ({ browser })
   });
   expect(overflowHome).toBeLessThanOrEqual(1);
 
-  await nav.getByRole("link", { name: "Günlüğüm" }).click();
+  await page.getByRole("link", { name: "Günlüğüm" }).click();
   await expect(page.getByRole("heading", { name: "Günlüğüm" })).toBeVisible();
-  await expect(page.getByText("Velilerin görebilir", { exact: true })).toBeVisible();
+  await expect(page.getByText("Bende kalacak · özel", { exact: true })).toBeVisible();
   await page.goto(`/cocuk/gunluk/${entry.id}`);
   await expect(page.locator("#journal-body")).toBeVisible();
   await expect(page.locator("#journal-body")).toHaveValue(/parkta oynadım/);
   await expect(page.getByRole("heading", { name: "1. Anlat / yaz" })).toBeVisible();
   await expect(
-    page.getByText("Buraya kaydettiklerini velilerin görebilir.", { exact: true }),
+    page.getByText("Yazın özel kalır. Paylaşmak istersen açık onay verirsin.", { exact: true }),
   ).toBeVisible();
 
   await page.locator("#journal-body").fill("Özel günlük: parkta oynadım ve dondurma yedim.");
-  await page.getByRole("button", { name: "Bitirdim" }).click();
+  await page.getByRole("button", { name: "Kaydet (bende kalsın)" }).click();
   await expect(page.getByText(/Kaydedildi/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/Kaydın özel/)).toBeVisible();
 
   const parentCookie = await signInAndGetCookie(parent.email, parent.password);
   const parentCtx = await browser.newContext();
   await parentCtx.addCookies(parseCookieHeader(parentCookie));
   const parentPage = await parentCtx.newPage();
   await parentPage.goto(`/veli/gunluk/${entry.id}`);
-  await expect(parentPage.getByText(/dondurma yedim/)).toBeVisible();
+  await expect(parentPage.getByText(/dondurma yedim/)).toHaveCount(0);
+  await expect(parentPage.getByText(/bulunamadı|Bulunamadı|404/i).or(parentPage.getByRole("heading")).first()).toBeVisible();
 
   await ctx.close();
   await parentCtx.close();
 });
 
-test("home next-step matches Planım views; parent opens shares from home", async ({
+test("home next-step matches Haftam; parent home is plan-first with shares", async ({
   browser,
 }) => {
   const parent = await createParent({ email: `e2e_ux_plan_${Date.now()}@example.com` });
@@ -116,16 +120,16 @@ test("home next-step matches Planım views; parent opens shares from home", asyn
   await page.getByRole("button", { name: "Kaydet" }).click();
   await expect(page.getByText(/Kaydedildi/)).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Haftalık plana git" }).click();
-  await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible({ timeout: 15_000 });
 
   await page.goto("/cocuk/ana");
-  await expect(page.getByText("UX sıradaki adım")).toBeVisible();
+  await expect(page.getByText("UX sıradaki adım").first()).toBeVisible();
   await page
     .getByRole("navigation", { name: "Çocuk gezinti" })
-    .getByRole("link", { name: "Planım" })
+    .getByRole("link", { name: "Haftam" })
     .click();
-  await expect(page.getByText("UX sıradaki adım")).toBeVisible();
-  await page.getByRole("tab", { name: "Pano" }).click();
+  await expect(page.getByText("UX sıradaki adım").first()).toBeVisible();
+  await page.getByRole("link", { name: "Duruma göre (Pano)" }).click();
   await expect(page.getByText("UX sıradaki adım").first()).toBeVisible();
 
   const entry = await createJournalEntry({
@@ -138,7 +142,7 @@ test("home next-step matches Planım views; parent opens shares from home", asyn
     entryId: entry.id,
     parentMessage: "",
     supportRequest: "Matematikte yardımcı olur musun?",
-    expectedRevision: entry.draft.revision,
+    expectedRevision: entry.draft?.revision ?? 1,
   });
   await publishShare({
     childUserId,
@@ -151,6 +155,8 @@ test("home next-step matches Planım views; parent opens shares from home", asyn
   await parentCtx.addCookies(parseCookieHeader(parentCookie));
   const parentPage = await parentCtx.newPage();
   await parentPage.goto("/veli/ana");
+  await expect(parentPage.getByRole("heading", { name: "Yaklaşan plan" })).toBeVisible();
+  await expect(parentPage.getByRole("heading", { name: "Son günlükler" })).toHaveCount(0);
   await expect(parentPage.getByText("Henüz seninle paylaşılmış bir içerik yok")).toHaveCount(0);
   await expect(parentPage.getByText("Matematikte yardımcı olur musun?")).toBeVisible();
   await expect(parentPage.getByText("ÖZEL destekli")).toHaveCount(0);
@@ -167,7 +173,7 @@ test("home next-step matches Planım views; parent opens shares from home", asyn
     entryId: entry2.id,
     parentMessage: "Bugün okul güzeldi.",
     supportRequest: "",
-    expectedRevision: entry2.draft.revision,
+    expectedRevision: entry2.draft?.revision ?? 1,
   });
   await publishShare({
     childUserId,

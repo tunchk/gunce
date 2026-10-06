@@ -34,39 +34,67 @@ Mail delivery is abstracted in `src/lib/mail.ts` (`sendMail`). Local transports 
 
 Pre-migration authorization was “any `FamilyMembership` of `PublishedShare.familyId`”. Migration backfills MANAGER access for each membership×child and recipients for each share×membership (generation 1). Parent list/detail/guidance now require active access **and** matching recipient generation.
 
-## Journal visibility (Milestone 11)
+## Journal visibility (Milestone 12A)
 
 | Mode | Model fields | Parent access |
 |------|--------------|---------------|
-| `LEGACY_PRIVATE` | Pre-existing entries (migration) | Only via approved `PublishedShare` + matching `PublishedShareRecipient` generation |
-| `GUARDIAN_VISIBLE` | New creates | Full saved `JournalEntry.body` for active `ChildGuardianAccess`; no share draft/snapshot |
+| `LEGACY_PRIVATE` | New creates (default) + pre-M11 private | Only via approved `PublishedShare` + matching `PublishedShareRecipient` generation |
+| `GUARDIAN_VISIBLE` | Historical M11 rows only (no new creates) | Full saved `JournalEntry.body` for active `ChildGuardianAccess`; no share draft/snapshot |
 
 Related:
 
 | Concept | Model | Notes |
 |---------|-------|-------|
-| Guardian AI | `JournalGuardianAi` | Summary + conversation opener + support action; revision-keyed; guardian-only |
-| AI jobs | `JournalAiJob` | Durable outbox; coalesce by `entryId`+`sourceRevision`; local `npm run jobs:worker` / one-shot `jobs:process` |
-| Notifications | `AppNotification` | Per-recipient read; uniqueness keys; soft `invalidatedAt` on revoke/delete/withdraw |
-| Completion reflection | `PlanStudyStep.completionReflection` | Optional child self-report after DONE; cleared with `completedAt` on reopen |
+| Guardian AI | `JournalGuardianAi` | Only for `GUARDIAN_VISIBLE`; summary + guidance; revision-keyed |
+| AI jobs | `JournalAiJob` | Durable outbox; enqueue skipped for private entries |
+| Notifications | `AppNotification` | Per-recipient read; soft `invalidatedAt` on revoke/delete/withdraw |
+| Completion reflection | `PlanStudyStep.completionReflection` | Child-private; parent plan mappers return empty string |
 | Plan notify kinds | `PLAN_*` | Create / schedule change / step completed / extract batch (grouped) |
+| Help request / offer | `HelpRequest`, `HelpOffer` | Child-initiated; multi-guardian offers; child accepts one |
+| Help notify kinds | `HELP_*` | Request/offer/accept/cancel/complete + update/withdraw/accepted-cancel/reopen |
+
+## Help workflow (Milestone 12B + 12B.1)
+
+| Status (`HelpRequest`) | Meaning |
+|------------------------|---------|
+| `OPEN` | Waiting for offers |
+| `OFFERED` | ≥1 pending offer |
+| `ACCEPTED` | Child selected an offer; session derived from that offer’s date/time |
+| `COMPLETED` / `CANCELLED` | Terminal |
+
+| Status (`HelpOffer`) | Meaning |
+|----------------------|---------|
+| `PENDING` | Awaiting child choice (siblings stay pending after another is accepted — M12B.1) |
+| `ACCEPTED` | Selected |
+| `DECLINED` | Used when the request is cancelled (not auto-declined on accept) |
+| `WITHDRAWN` | Guardian withdrew pending offer, cancelled accepted session, or plan schedule invalidated acceptance |
+
+**M12B.1 lifecycle:** edit/withdraw pending offers; accepted guardian “Gelemeyeceğim” clears `acceptedOfferId` and reopens; plan `plannedDate` change on linked step/commitment reopens accepted help (same reopen path). Child cancel of the request remains separate. `sessionInvalidatedAt` marks an invalidated accepted session for UX (`lifecycleNotice`); withdrawing a pending offer alone does not set it. Sibling `PENDING` offers stay as fallback but are not selectable while the request is `ACCEPTED`.
+
+Authorization: child owns plan item + request; guardians need active `ChildGuardianAccess`. Revoked guardians get 404; their pending offers cannot be accepted. Notifications carry plan title + help type/time only — never journal narrative.
+
+Accepted sessions are **derived** from `HelpRequest.acceptedOfferId` → `HelpOffer` (no Family Calendar entity; that is M13).
 
 Local development runs `npm run dev` = Next.js + continuous worker (loads `.env` then `.env.local`). Do not start job loops inside request handlers.
 
 Semantics:
 
-- First non-empty save of a `GUARDIAN_VISIBLE` entry notifies each active guardian once (`firstNotifiedAt` + uniqueness key).
-- Autosaves update the narrative and re-enqueue AI; they do not create duplicate notifications or reset read state.
-- Empty shells create no notifications.
+- New journal creates are `LEGACY_PRIVATE`: no guardian notify, no parent body, no guardian AI.
+- Historical `GUARDIAN_VISIBLE`: first non-empty save notifies once; autosaves do not duplicate.
 - AI must not block save; stale jobs cannot overwrite a newer revision.
-- Opening the notification list does not mark items read; opening an item (or the journal detail) may mark that recipient’s item read.
+- Opening the notification list does not mark items read; opening an item may mark that recipient’s item read.
 - In-app reminder notifications reuse `ReminderOccurrence` eligibility and do not require VAPID/push devices.
 
-Legacy share routes (`/veli/paylasim/[shareId]`) and recipient rules remain. New guardian detail: `/veli/gunluk/[entryId]`.
+Legacy share routes (`/veli/paylasim/[shareId]`) and recipient rules remain. Historical guardian detail: `/veli/gunluk/[entryId]`.
 
-## Journal & sharing model (Milestone 2 — legacy path)
+Migration `20261006120000_m12a_private_default_journals` only changes the **column default** to `LEGACY_PRIVATE`; it does not rewrite existing rows.
+Migration `20261006220000_m12b_help_workflow` adds help enums/tables and notification kinds.
+Migration `20261006230000_m12b1_help_lifecycle` adds M12B.1 notification kinds only (no table shape change).
+Migration `20261006240000_m12b1_session_invalidated` adds `HelpRequest.sessionInvalidatedAt` so reopen UX is not triggered by pending-only withdraws.
 
-Private writing and parent-visible **snapshots** remain separate for `LEGACY_PRIVATE` entries:
+## Journal & sharing model (Milestone 2 — share path)
+
+Private writing and parent-visible **snapshots** for `LEGACY_PRIVATE` entries:
 
 | Concept | Model | Notes |
 |---------|-------|-------|
@@ -75,9 +103,9 @@ Private writing and parent-visible **snapshots** remain separate for `LEGACY_PRI
 | Published snapshot | `PublishedShare` | Approved copy parents can read; soft-withdrawn via `withdrawnAt` |
 | Parent approach tips | `ParentGuidance` | Cached AI tips tied to `sourceDraftRevision`; built only from published fields |
 
-Parent home shows approved legacy share excerpts with **Detayı gör**, plus recent `GUARDIAN_VISIBLE` entries (deduped by source entry). Pairing/session controls live under `/veli/ayarlar`.
+Parent home is plan-first (upcoming commitments/steps). Approved share excerpts remain below. Pairing/session controls live under `/veli/ayarlar`.
 
-Semantics (legacy):
+Semantics (share path):
 
 - Editing `JournalEntry.body` does not change `PublishedShare`.
 - Editing `SharingDraft` does not change an existing published snapshot until the child publishes again (“Paylaşımı güncelle”).

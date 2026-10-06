@@ -120,7 +120,7 @@ export function request(url: string, init?: RequestInit) {
   return new Request(url, init) as unknown as import("next/server").NextRequest;
 }
 
-/** Convert a new-model entry into a legacy-private entry for share-flow tests. */
+/** Ensure a share-draft exists on a child-private entry (M12A default). */
 export async function markEntryLegacyPrivate(entryId: string) {
   await prisma.appNotification.deleteMany({ where: { entryId } });
   await prisma.journalAiJob.deleteMany({ where: { entryId } });
@@ -133,6 +133,16 @@ export async function markEntryLegacyPrivate(entryId: string) {
     where: { entryId },
     create: { entryId, parentMessage: "", supportRequest: "" },
     update: {},
+  });
+}
+
+/** Force historical M11 GUARDIAN_VISIBLE semantics for regression tests (no new creates use this). */
+export async function markEntryGuardianVisible(entryId: string) {
+  await prisma.sharingDraft.deleteMany({ where: { entryId } });
+  await prisma.publishedShare.deleteMany({ where: { entryId } });
+  await prisma.journalEntry.update({
+    where: { id: entryId },
+    data: { visibility: "GUARDIAN_VISIBLE" },
   });
 }
 

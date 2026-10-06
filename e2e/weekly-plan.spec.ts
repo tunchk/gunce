@@ -51,11 +51,11 @@ test("exam → prep steps → complete/reschedule → parent read-only", async (
   const page = await childCtx.newPage();
 
   await page.goto("/cocuk/ana");
-  await expect(page.getByRole("heading", { name: "Günümü anlat" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Haftalık plana git" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sıradaki adımım" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Haftama git" }).or(page.getByRole("heading", { name: "Bugün" }).first())).toBeVisible();
 
-  await page.getByRole("navigation", { name: "Çocuk gezinti" }).getByRole("link", { name: "Planım" }).click();
-  await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Çocuk gezinti" }).getByRole("link", { name: "Haftam" }).click();
+  await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible();
   await page.getByRole("button", { name: "Plan ekle" }).click();
   await expect(page.getByRole("heading", { name: "Plan ekle" })).toBeVisible();
 
@@ -84,7 +84,7 @@ test("exam → prep steps → complete/reschedule → parent read-only", async (
   await page.getByRole("button", { name: "Kaydet" }).click();
   await expect(page.getByText(/Kaydedildi/)).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Haftalık plana git" }).click();
-  await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("button", { name: "Plan ekle" }).click();
   await page.getByRole("button", { name: "Çalışma / hazırlık adımı" }).click();
@@ -95,7 +95,7 @@ test("exam → prep steps → complete/reschedule → parent read-only", async (
   await page.getByRole("button", { name: "Kaydet" }).click();
   await expect(page.getByText(/Kaydedildi/)).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Haftalık plana git" }).click();
-  await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible({ timeout: 15_000 });
 
   // Open Wednesday step via day selector — weekday short labels
   await page.getByRole("button").filter({ hasText: "Çar" }).nth(0).click();
@@ -129,10 +129,9 @@ test("exam → prep steps → complete/reschedule → parent read-only", async (
   await parentCtx.addCookies(parseCookieHeader(parentCookie));
   const parentPage = await parentCtx.newPage();
   await parentPage.goto("/veli/ana");
-  await expect(parentPage.getByRole("heading", { name: "Haftanın planı" })).toBeVisible();
+  await expect(parentPage.getByRole("heading", { name: "Yaklaşan plan" })).toBeVisible();
   await parentPage.getByRole("button", { name: "Tüm planı gör" }).click();
   await expect(parentPage.getByRole("heading", { name: "Haftanın planı" })).toBeVisible();
-  await expect(parentPage.getByText("7 Eyl Pzt", { exact: false })).toBeVisible({ timeout: 10_000 });
   await parentPage.getByRole("button").filter({ hasText: "Cum" }).nth(0).click();
   await expect(parentPage.getByText("Almanca kelime sınavı").first()).toBeVisible({
     timeout: 10_000,

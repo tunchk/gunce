@@ -28,9 +28,11 @@ import {
   countUnreadNotifications,
   listNotifications,
   markNotificationRead,
+  notifyGuardiansOfVisibleEntry,
 } from "@/lib/notifications";
 import {
   createParent,
+  markEntryGuardianVisible,
   markEntryLegacyPrivate,
   onboardParentWithChild,
   pairChildAndGetCookie,
@@ -70,7 +72,7 @@ function stubGuidance(): ParentGuidanceProvider {
   };
 }
 
-describe("Milestone 11 guardian visibility + notifications", () => {
+describe("M12A journal privacy + historical GUARDIAN_VISIBLE", () => {
   beforeEach(() => {
     setSummarizationProviderForTests(stubSummary());
     setParentGuidanceProviderForTests(stubGuidance());
@@ -80,7 +82,7 @@ describe("Milestone 11 guardian visibility + notifications", () => {
     setParentGuidanceProviderForTests(null);
   });
 
-  it("migrates legacy private narrative while approved snapshots stay accessible", async () => {
+  it("approved share snapshots stay accessible while private body is not", async () => {
     const parent = await createParent();
     const child = await onboardParentWithChild(parent.user.id);
     await pairChildAndGetCookie(parent.user.id, child.id);
@@ -116,7 +118,7 @@ describe("Milestone 11 guardian visibility + notifications", () => {
     expect(JSON.stringify(visible)).not.toContain("LEGACY_PRIVATE_SECRET");
   });
 
-  it("new save gives active guardians full narrative without publication", async () => {
+  it("new save is child-private: no parent body, no notify, no guardian AI", async () => {
     const parent = await createParent();
     const child = await onboardParentWithChild(parent.user.id);
     await pairChildAndGetCookie(parent.user.id, child.id);
@@ -128,14 +130,28 @@ describe("Milestone 11 guardian visibility + notifications", () => {
       childUserId,
       body: "Bugün yağmurda yürüdüm",
     });
-    expect(entry.visibility).toBe("GUARDIAN_VISIBLE");
+    expect(entry.visibility).toBe("LEGACY_PRIVATE");
     expect(entry.published).toBeNull();
 
-    const drafts = await prisma.sharingDraft.count({ where: { entryId: entry.id } });
-    expect(drafts).toBe(0);
+    await expect(getParentVisibleEntry(parent.user.id, entry.id)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    const listed = await listParentVisibleEntries(parent.user.id);
+    expect(listed.find((v) => v.entryId === entry.id)).toBeUndefined();
+    expect(JSON.stringify(listed)).not.toContain("yağmurda");
 
-    const detail = await getParentVisibleEntry(parent.user.id, entry.id);
-    expect(detail.body).toContain("yağmurda");
+    expect(
+      await prisma.appNotification.count({
+        where: { entryId: entry.id, invalidatedAt: null },
+      }),
+    ).toBe(0);
+    expect(await prisma.journalAiJob.count({ where: { entryId: entry.id } })).toBe(0);
+
+    await enqueueGuardianAiJob({
+      entryId: entry.id,
+      sourceRevision: entry.revision,
+    });
+    expect(await prisma.journalAiJob.count({ where: { entryId: entry.id } })).toBe(0);
 
     const parentCookie = await signInAndGetCookie(parent.email, parent.password);
     const api = await getParentJournal(
@@ -144,12 +160,10 @@ describe("Milestone 11 guardian visibility + notifications", () => {
       }),
       { params: Promise.resolve({ entryId: entry.id }) },
     );
-    expect(api.status).toBe(200);
-    const payload = await api.json();
-    expect(payload.entry.body).toContain("yağmurda");
+    expect(api.status).toBe(404);
   });
 
-  it("empty entries and empty shells produce no notifications", async () => {
+  it("empty entries produce no notifications", async () => {
     const parent = await createParent();
     const child = await onboardParentWithChild(parent.user.id);
     await pairChildAndGetCookie(parent.user.id, child.id);
@@ -170,7 +184,7 @@ describe("Milestone 11 guardian visibility + notifications", () => {
     ).toBe(0);
   });
 
-  it("repeated autosaves create one notification per guardian and keep read state", async () => {
+  it("historical GUARDIAN_VISIBLE still notifies once per guardian and keeps read state", async () => {
     const manager = await createParent({ email: `m11a_${Date.now()}@example.com` });
     await verifyParentEmail(manager.user.id);
     const child = await onboardParentWithChild(manager.user.id);
@@ -198,6 +212,7 @@ describe("Milestone 11 guardian visibility + notifications", () => {
       body: "",
       clientRequestId: "autosave-shell",
     });
+    await markEntryGuardianVisible(entry.id);
     entry = await updateJournalBody({
       childUserId,
       entryId: entry.id,
@@ -257,7 +272,7 @@ describe("Milestone 11 guardian visibility + notifications", () => {
     expect(inv.readAt).toBeNull();
   });
 
-  it("guardian read states are independent via notification API", async () => {
+  it("historical guardian read states are independent via notification API", async () => {
     const manager = await createParent({ email: `m11c_${Date.now()}@example.com` });
     await verifyParentEmail(manager.user.id);
     const child = await onboardParentWithChild(manager.user.id);
@@ -283,6 +298,20 @@ describe("Milestone 11 guardian visibility + notifications", () => {
       childUserId,
       body: "Bağımsız okuma",
     });
+    await markEntryGuardianVisible(entry.id);
+    const childRow = await prisma.childProfile.findUniqueOrThrow({
+      where: { id: child.id },
+    });
+    await notifyGuardiansOfVisibleEntry({
+      entryId: entry.id,
+      childId: child.id,
+      childDisplayName: childRow.displayName,
+    });
+    await prisma.journalEntry.update({
+      where: { id: entry.id },
+      data: { firstNotifiedAt: new Date() },
+    });
+
     const noteA = await prisma.appNotification.findFirstOrThrow({
       where: { entryId: entry.id, recipientUserId: manager.user.id },
     });
@@ -333,7 +362,7 @@ describe("Milestone 11 guardian visibility + notifications", () => {
     expect(JSON.stringify(listBody)).not.toContain("Bağımsız okuma");
   });
 
-  it("access removal blocks entries, guidance, notifications, and unread counts", async () => {
+  it("access removal blocks historical visible entries and unread counts", async () => {
     const manager = await createParent({ email: `m11e_${Date.now()}@example.com` });
     await verifyParentEmail(manager.user.id);
     const child = await onboardParentWithChild(manager.user.id);
@@ -359,6 +388,16 @@ describe("Milestone 11 guardian visibility + notifications", () => {
       childUserId,
       body: "Erişim kaldırılacak",
     });
+    await markEntryGuardianVisible(entry.id);
+    const childRow = await prisma.childProfile.findUniqueOrThrow({
+      where: { id: child.id },
+    });
+    await notifyGuardiansOfVisibleEntry({
+      entryId: entry.id,
+      childId: child.id,
+      childDisplayName: childRow.displayName,
+    });
+
     expect(await countUnreadNotifications(invitee.user.id)).toBe(1);
 
     await removeGuardianAccess({
@@ -379,7 +418,7 @@ describe("Milestone 11 guardian visibility + notifications", () => {
     });
   });
 
-  it("newly accepted guardians can read new-model history without floods or legacy text", async () => {
+  it("newly accepted guardians see historical GUARDIAN_VISIBLE only; not private bodies", async () => {
     const manager = await createParent({ email: `m11g_${Date.now()}@example.com` });
     await verifyParentEmail(manager.user.id);
     const child = await onboardParentWithChild(manager.user.id);
@@ -390,13 +429,13 @@ describe("Milestone 11 guardian visibility + notifications", () => {
 
     const visible = await createJournalEntry({
       childUserId,
-      body: "Yeni model geçmiş",
+      body: "Tarihsel görünür",
     });
-    const legacy = await createJournalEntry({
+    await markEntryGuardianVisible(visible.id);
+    const privateEntry = await createJournalEntry({
       childUserId,
       body: "ESKI_OZEL_METIN",
     });
-    await markEntryLegacyPrivate(legacy.id);
 
     const invitee = await createParent({
       email: `m11h_${Date.now()}@example.com`,
@@ -414,20 +453,21 @@ describe("Milestone 11 guardian visibility + notifications", () => {
 
     const history = await listParentVisibleEntries(invitee.user.id);
     expect(history.some((h) => h.entryId === visible.id)).toBe(true);
-    expect(history.find((h) => h.entryId === visible.id)?.body).toContain("Yeni model");
-    expect(history.some((h) => h.entryId === legacy.id)).toBe(false);
+    expect(history.find((h) => h.entryId === visible.id)?.body).toContain("Tarihsel");
+    expect(history.some((h) => h.entryId === privateEntry.id)).toBe(false);
+    expect(JSON.stringify(history)).not.toContain("ESKI_OZEL_METIN");
 
     const flood = await prisma.appNotification.count({
       where: {
         recipientUserId: invitee.user.id,
-        entryId: { in: [visible.id, legacy.id] },
+        entryId: { in: [visible.id, privateEntry.id] },
         invalidatedAt: null,
       },
     });
     expect(flood).toBe(0);
   });
 
-  it("stale AI responses cannot overwrite current-revision output; AI failure keeps narrative", async () => {
+  it("stale AI on historical GUARDIAN_VISIBLE cannot overwrite current revision", async () => {
     const parent = await createParent();
     const child = await onboardParentWithChild(parent.user.id);
     await pairChildAndGetCookie(parent.user.id, child.id);
@@ -439,6 +479,7 @@ describe("Milestone 11 guardian visibility + notifications", () => {
       childUserId,
       body: "revizyon bir",
     });
+    await markEntryGuardianVisible(entry.id);
 
     entry = await updateJournalBody({
       childUserId,
@@ -457,7 +498,6 @@ describe("Milestone 11 guardian visibility + notifications", () => {
     expect(ready.summaryText).toContain("GUNCEL_OZET");
     expect(ready.sourceRevision).toBe(entry.revision);
 
-    // Simulate a late/stale job for an older revision attempting to write.
     const staleRev = entry.revision - 1;
     await prisma.journalAiJob.upsert({
       where: {
@@ -522,6 +562,7 @@ describe("Milestone 11 guardian visibility + notifications", () => {
       childUserId,
       body: "silinecek anlatım",
     });
+    await markEntryGuardianVisible(entry.id);
     await enqueueGuardianAiJob({
       entryId: entry.id,
       sourceRevision: entry.revision,

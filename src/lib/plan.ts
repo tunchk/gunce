@@ -220,6 +220,32 @@ function toStudyStepView(
   return toStudyStepViewFromRow(s);
 }
 
+/** Parent-facing step view: status yes, free-text reflection never. */
+function toParentStudyStepView(
+  s: Parameters<typeof toStudyStepViewFromRow>[0],
+): StudyStepView {
+  return { ...toStudyStepViewFromRow(s), completionReflection: "" };
+}
+
+function stripParentWeekReflections<T extends {
+  days: { studySteps: StudyStepView[] }[];
+  unscheduled: StudyStepView[];
+  missed: StudyStepView[];
+}>(week: T): T {
+  return {
+    ...week,
+    days: week.days.map((d) => ({
+      ...d,
+      studySteps: d.studySteps.map((s) => ({ ...s, completionReflection: "" })),
+    })),
+    unscheduled: week.unscheduled.map((s) => ({
+      ...s,
+      completionReflection: "",
+    })),
+    missed: week.missed.map((s) => ({ ...s, completionReflection: "" })),
+  };
+}
+
 const stepInclude = {
   relatedCommitment: {
     select: { title: true, type: true, dueDate: true, eventDate: true },
@@ -523,6 +549,8 @@ export async function updateCommitment(input: {
       recordId: fresh.id,
       changeId: `r${fresh.revision}`,
     });
+    const { reopenAcceptedHelpDueToPlanChange } = await import("@/lib/help");
+    await reopenAcceptedHelpDueToPlanChange({ commitmentId: fresh.id });
   }
   return toCommitmentView(fresh);
 }
@@ -646,6 +674,8 @@ export async function updateStudyStep(input: {
       recordId: fresh.id,
       changeId: `r${fresh.revision}`,
     });
+    const { reopenAcceptedHelpDueToPlanChange } = await import("@/lib/help");
+    await reopenAcceptedHelpDueToPlanChange({ studyStepId: fresh.id });
   }
   return toStudyStepView(fresh);
 }
@@ -1049,7 +1079,7 @@ export async function getStudyStep(childUserId: string, id: string) {
   return toStudyStepView(row);
 }
 
-/** Parent read-only plan for accessible children — never includes journal fields. */
+/** Parent read-only plan for accessible children — never includes journal fields or completion reflections. */
 export async function getParentWeekPlan(parentUserId: string, weekStartIso?: string) {
   const accesses = await prisma.childGuardianAccess.findMany({
     where: { userId: parentUserId, revokedAt: null },
@@ -1061,7 +1091,9 @@ export async function getParentWeekPlan(parentUserId: string, weekStartIso?: str
   for (const access of accesses) {
     const child = access.child;
     if (!child.userId) continue;
-    const week = await getWeekPlanForChild(child.userId, weekStartIso);
+    const week = stripParentWeekReflections(
+      await getWeekPlanForChild(child.userId, weekStartIso),
+    );
     result.push({
       childId: child.id,
       childDisplayName: child.displayName,
@@ -1099,7 +1131,7 @@ export async function getParentStudyStep(parentUserId: string, studyStepId: stri
   return {
     childDisplayName: row.child.displayName,
     timeZone: row.child.timeZone,
-    studyStep: toStudyStepView(row),
+    studyStep: toParentStudyStepView(row),
   };
 }
 
@@ -1120,6 +1152,6 @@ export async function getParentCommitment(parentUserId: string, commitmentId: st
     childDisplayName: row.child.displayName,
     timeZone: row.child.timeZone,
     commitment: toCommitmentView(row),
-    studySteps: steps.map(toStudyStepView),
+    studySteps: steps.map(toParentStudyStepView),
   };
 }

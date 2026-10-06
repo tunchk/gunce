@@ -322,42 +322,20 @@ export async function createJournalEntry(input: {
   const body = normalizeOptionalText(input.body ?? "", JOURNAL_BODY_MAX);
   const hasBody = Boolean(body.trim());
 
-  const entry = await prisma.$transaction(async (tx) => {
-    const created = await tx.journalEntry.create({
-      data: {
-        childId: child.id,
-        promptKey: input.promptKey ?? null,
-        diaryDate: diaryDateForTimeZone(child.timeZone),
-        body,
-        originalBody: body,
-        status: hasBody ? "SAVED" : "DRAFT",
-        visibility: "GUARDIAN_VISIBLE",
-        clientRequestId,
-        firstNotifiedAt: hasBody ? new Date() : null,
-      },
-      include: entryInclude,
-    });
-
-    if (hasBody) {
-      const { notifyGuardiansOfVisibleEntry } = await import("@/lib/notifications");
-      await notifyGuardiansOfVisibleEntry({
-        entryId: created.id,
-        childId: child.id,
-        childDisplayName: child.displayName,
-        tx,
-      });
-    }
-
-    return created;
+  // M12A: new journals are child-private. GUARDIAN_VISIBLE is historical only.
+  const entry = await prisma.journalEntry.create({
+    data: {
+      childId: child.id,
+      promptKey: input.promptKey ?? null,
+      diaryDate: diaryDateForTimeZone(child.timeZone),
+      body,
+      originalBody: body,
+      status: hasBody ? "SAVED" : "DRAFT",
+      visibility: "LEGACY_PRIVATE",
+      clientRequestId,
+    },
+    include: entryInclude,
   });
-
-  if (hasBody) {
-    const { enqueueGuardianAiJob } = await import("@/lib/journal-ai");
-    await enqueueGuardianAiJob({
-      entryId: entry.id,
-      sourceRevision: entry.revision,
-    });
-  }
 
   return toOwnedEntryView(entry);
 }

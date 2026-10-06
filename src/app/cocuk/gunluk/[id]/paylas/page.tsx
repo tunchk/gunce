@@ -32,7 +32,7 @@ export default async function ShareReviewPage({ params }: Props) {
   return (
     <Shell
       title="Ne paylaşılacak?"
-      subtitle="Eski kayıtlar için: özel yazın sende kalır. Velinin göreceği metni ayrıca hazırlarsın."
+      subtitle="Özel yazın sende kalır. Velinin göreceği metni ayrıca hazırlarsın."
       withChildNav
     >
       <Panel>

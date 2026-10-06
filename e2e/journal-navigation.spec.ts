@@ -18,7 +18,7 @@ test.beforeEach(async () => {
 
 test.use({ viewport: { width: 390, height: 844 } });
 
-test("type then tap Planım: text persists after return", async ({ browser }) => {
+test("type then tap Haftam: text persists after return", async ({ browser }) => {
   const parent = await createParent({ email: `e2e_nav_ok_${Date.now()}@example.com` });
   const child = await onboardParentWithChild(parent.user.id);
   const childCookie = await pairChildAndGetCookie(parent.user.id, child.id);
@@ -34,14 +34,10 @@ test("type then tap Planım: text persists after return", async ({ browser }) =>
   await page.locator("#journal-body").fill("Planıma gitmeden önce yazılan metin.");
   await page
     .getByRole("navigation", { name: "Çocuk gezinti" })
-    .getByRole("link", { name: "Planım" })
+    .getByRole("link", { name: "Haftam" })
     .click();
-  await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible({ timeout: 15_000 });
 
-  await page
-    .getByRole("navigation", { name: "Çocuk gezinti" })
-    .getByRole("link", { name: "Günlüğüm" })
-    .click();
   await page.goto(`/cocuk/gunluk/${entry.id}`);
   await expect(page.locator("#journal-body")).toHaveValue("Planıma gitmeden önce yazılan metin.");
 
@@ -73,11 +69,11 @@ test("slow save: navigation waits for persistence (simulated)", async ({ browser
   await page.locator("#journal-body").fill("Yavaş kayıt metni.");
   const navClick = page
     .getByRole("navigation", { name: "Çocuk gezinti" })
-    .getByRole("link", { name: "Ana" })
+    .getByRole("link", { name: "Bugün" })
     .click();
   await expect(page.getByText("Kaydediliyor…").first()).toBeVisible({ timeout: 5_000 });
   await navClick;
-  await expect(page.getByRole("heading", { name: "Günümü anlat" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Sıradaki adımım" })).toBeVisible({
     timeout: 20_000,
   });
 
@@ -122,18 +118,18 @@ test("failed save: stay, retry works; discard leaves without false success", asy
   await page.locator("#journal-body").fill("Başarısız deneme metni.");
   await page
     .getByRole("navigation", { name: "Çocuk gezinti" })
-    .getByRole("link", { name: "Hedeflerim" })
+    .getByRole("link", { name: "Haftam" })
     .click();
 
   await expect(page.getByRole("heading", { name: "Kayıt başarısız" })).toBeVisible({
     timeout: 10_000,
   });
-  await expect(page.getByRole("heading", { name: "Hedeflerim" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Haftam" })).toHaveCount(0);
   await expect(page.getByText("Kaydedildi")).toHaveCount(0);
 
   blockSaves = false;
   await page.getByRole("button", { name: "Tekrar kaydetmeyi dene" }).click();
-  await expect(page.getByRole("heading", { name: "Hedeflerim" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible({
     timeout: 15_000,
   });
   const afterRetry = await prisma.journalEntry.findUniqueOrThrow({ where: { id: entry.id } });
@@ -145,11 +141,11 @@ test("failed save: stay, retry works; discard leaves without false success", asy
   await page.locator("#journal-body").fill("Bırakılacak taslak.");
   await page
     .getByRole("navigation", { name: "Çocuk gezinti" })
-    .getByRole("link", { name: "Ana" })
+    .getByRole("link", { name: "Bugün" })
     .click();
   await expect(page.getByRole("heading", { name: "Kayıt başarısız" })).toBeVisible();
   await page.getByRole("button", { name: "Kaydetmeden çık" }).click();
-  await expect(page.getByRole("heading", { name: "Günümü anlat" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Sıradaki adımım" })).toBeVisible({
     timeout: 10_000,
   });
   const afterDiscard = await prisma.journalEntry.findUniqueOrThrow({ where: { id: entry.id } });
@@ -187,12 +183,12 @@ test("revision conflict: no silent overwrite (simulated)", async ({ browser }) =
   await page.locator("#journal-body").fill("Çakışan yerel metin.");
   await page
     .getByRole("navigation", { name: "Çocuk gezinti" })
-    .getByRole("link", { name: "Planım" })
+    .getByRole("link", { name: "Haftam" })
     .click();
   await expect(page.getByRole("heading", { name: "Kayıt çakışması" })).toBeVisible({
     timeout: 10_000,
   });
-  await expect(page.getByRole("heading", { name: "Planım" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Haftam" })).toHaveCount(0);
   const row = await prisma.journalEntry.findUniqueOrThrow({ where: { id: entry.id } });
   expect(row.body).toBe("Sunucu metni.");
 
@@ -277,20 +273,20 @@ test("pending voice: stay preserves session; confirmed exit cleans up (simulated
 
   await page
     .getByRole("navigation", { name: "Çocuk gezinti" })
-    .getByRole("link", { name: "Ana" })
+    .getByRole("link", { name: "Bugün" })
     .click();
   await expect(page.getByRole("heading", { name: "Kaydedilmemiş ses var" })).toBeVisible();
   await page.getByRole("button", { name: "Sayfada kal" }).click();
   await expect(page.locator("#journal-body")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Günümü anlat" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Sıradaki adımım" })).toHaveCount(0);
 
   await page
     .getByRole("navigation", { name: "Çocuk gezinti" })
-    .getByRole("link", { name: "Ana" })
+    .getByRole("link", { name: "Bugün" })
     .click();
   await expect(page.getByRole("heading", { name: "Kaydedilmemiş ses var" })).toBeVisible();
   await page.getByRole("button", { name: "Sesi bırak ve çık" }).click();
-  await expect(page.getByRole("heading", { name: "Günümü anlat" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Sıradaki adımım" })).toBeVisible({
     timeout: 15_000,
   });
 

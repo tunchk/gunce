@@ -12,7 +12,7 @@ type Props = {
   wide?: boolean;
   /** Wider content for planning boards (Hafta/Pano). */
   planWide?: boolean;
-  /** Fixed child bottom navigation (Ana / Günlüğüm / Planım / Hedeflerim). */
+  /** Fixed child bottom navigation (Bugün / Ekle / Haftam). */
   withChildNav?: boolean;
   /** Optional top-right action (e.g. Ayarlar). */
   headerAction?: React.ReactNode;

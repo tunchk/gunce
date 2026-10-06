@@ -30,8 +30,8 @@ export default async function JournalEntryPage({ params }: Props) {
 
   const subtitle =
     entry.visibility === "GUARDIAN_VISIBLE"
-      ? "Buraya kaydettiklerini velilerin görebilir. Planına eklemek isteğe bağlıdır."
-      : "Eski kayıt: özel metin sende kalır. Paylaşmak ve plana eklemek isteğe bağlıdır.";
+      ? "Bu eski kayıt velilerin görebilir modelinde. Planına eklemek isteğe bağlıdır."
+      : "Yazın özel kalır. Paylaşmak ve plana eklemek isteğe bağlıdır.";
 
   return (
     <Shell

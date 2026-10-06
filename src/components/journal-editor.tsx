@@ -138,7 +138,7 @@ export function JournalEditor({
           applyEntry(data.entry);
           setSaveState("saved");
           saveStateRef.current = "saved";
-          if (opts?.markSaved && data.entry.visibility === "GUARDIAN_VISIBLE") {
+          if (opts?.markSaved) {
             setFinished(true);
           }
           return true;
@@ -493,31 +493,71 @@ export function JournalEditor({
   const hasNarrative = Boolean(body.trim());
   const showLaterSteps = hasNarrative || Boolean(acceptedSummary.trim()) || Boolean(pendingSuggestion);
 
-  if (finished && isGuardianVisible && saveState === "saved" && hasNarrative) {
+  if (finished && saveState === "saved" && hasNarrative) {
+    if (isGuardianVisible) {
+      return (
+        <div className="space-y-4" role="status">
+          <p
+            className="rounded-2xl border p-3 text-sm leading-relaxed"
+            style={{ borderColor: "var(--line)", background: "var(--accent-soft)" }}
+          >
+            Bu eski kayıt velilerin görebilir modelinde.
+          </p>
+          <p className="text-lg font-semibold">{statusLabel}</p>
+          <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+            Anlatımın kaydedildi. İstersen düzeltmeye devam edebilir veya planına ekleyebilirsin.
+          </p>
+          {(guardianAiStatus === "FAILED" || guardianAiStatus === "UNAVAILABLE") &&
+          hasNarrative ? (
+            <button
+              type="button"
+              disabled={aiRetryBusy}
+              onClick={() => void retryGuardianAi()}
+              className="inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
+              style={{ border: "1px solid var(--line)" }}
+            >
+              {aiRetryBusy ? "Deneniyor…" : "Özeti yeniden dene"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setFinished(false)}
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
+            style={{ background: "var(--accent)", color: "white" }}
+          >
+            Düzenlemeye dön
+          </button>
+          {features.planExtractAvailable ? (
+            <button
+              type="button"
+              onClick={() => void flushThenNavigate(`/cocuk/gunluk/${entryId}/plan-oneri`)}
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
+              style={{ border: "1px solid var(--line)" }}
+            >
+              Planıma neler ekleyebilirim?
+            </button>
+          ) : null}
+          {error ? (
+            <p className="text-sm" style={{ color: "var(--danger)" }} role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4" role="status">
         <p
           className="rounded-2xl border p-3 text-sm leading-relaxed"
           style={{ borderColor: "var(--line)", background: "var(--accent-soft)" }}
         >
-          Buraya kaydettiklerini velilerin görebilir.
+          Kaydın özel. Velin görmez; paylaşmak istersen açık onay verirsin.
         </p>
         <p className="text-lg font-semibold">{statusLabel}</p>
         <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-          Anlatımın kaydedildi. İstersen düzeltmeye devam edebilir veya planına ekleyebilirsin.
+          Anlatımın kaydedildi. İstersen paylaşabilir veya planına ekleyebilirsin.
         </p>
-        {(guardianAiStatus === "FAILED" || guardianAiStatus === "UNAVAILABLE") &&
-        hasNarrative ? (
-          <button
-            type="button"
-            disabled={aiRetryBusy}
-            onClick={() => void retryGuardianAi()}
-            className="inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
-            style={{ border: "1px solid var(--line)" }}
-          >
-            {aiRetryBusy ? "Deneniyor…" : "Özeti yeniden dene"}
-          </button>
-        ) : null}
         <button
           type="button"
           onClick={() => setFinished(false)}
@@ -525,6 +565,14 @@ export function JournalEditor({
           style={{ background: "var(--accent)", color: "white" }}
         >
           Düzenlemeye dön
+        </button>
+        <button
+          type="button"
+          onClick={() => void flushThenNavigate(`/cocuk/gunluk/${entryId}/paylas`)}
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-base font-semibold"
+          style={{ border: "1px solid var(--line)" }}
+        >
+          Velinle paylaş
         </button>
         {features.planExtractAvailable ? (
           <button
@@ -547,15 +595,15 @@ export function JournalEditor({
 
   return (
     <div className="space-y-6">
-      {isGuardianVisible ? (
-        <p
-          className="rounded-2xl border p-3 text-sm leading-relaxed"
-          style={{ borderColor: "var(--line)", background: "var(--accent-soft)" }}
-          role="status"
-        >
-          Buraya kaydettiklerini velilerin görebilir.
-        </p>
-      ) : null}
+      <p
+        className="rounded-2xl border p-3 text-sm leading-relaxed"
+        style={{ borderColor: "var(--line)", background: "var(--accent-soft)" }}
+        role="status"
+      >
+        {isGuardianVisible
+          ? "Bu eski kayıt velilerin görebilir modelinde."
+          : "Yazın özel kalır. Paylaşmak istersen açık onay verirsin."}
+      </p>
 
       <div
         className="flex flex-wrap items-center justify-between gap-2 text-sm"

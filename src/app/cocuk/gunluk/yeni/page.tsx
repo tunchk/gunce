@@ -12,8 +12,8 @@ export default async function NewJournalPage() {
 
   return (
     <Shell
-      title="Günümü anlat"
-      subtitle="Bir konu seç. Kaydettiklerini velilerin görebilir."
+      title="Yeni yazı"
+      subtitle="Bir konu seç. Yazın özel kalır; paylaşmak istersen açık onay verirsin."
       withChildNav
     >
       <Panel>

@@ -56,7 +56,7 @@ test("goal → steps → complete on Pano → progress → parent read-only", as
   await expect(page.getByText("0 / 2 adım tamamlandı")).toBeVisible({ timeout: 10_000 });
 
   await page.goto("/cocuk/haftam?view=pano");
-  await expect(page.getByRole("tab", { name: "Pano" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("link", { name: "Hafta takvimine dön" })).toBeVisible();
   const statusTabs = page.getByRole("tablist", { name: "Pano sütunları" });
   await statusTabs.getByRole("tab", { name: /Yapılacak/ }).click();
 

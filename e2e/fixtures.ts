@@ -53,6 +53,8 @@ export async function wipe() {
     throw new Error(`Refuse wipe on ${rows[0]?.db}`);
   }
 
+  await prisma.helpOffer.deleteMany();
+  await prisma.helpRequest.deleteMany();
   await prisma.parentGuidance.deleteMany();
   await prisma.publishedShareRecipient.deleteMany();
   await prisma.appNotification.deleteMany();
@@ -118,6 +120,7 @@ export {
   prisma,
   signInAndGetCookie,
   markEntryLegacyPrivate,
+  markEntryGuardianVisible,
 } from "../tests/helpers";
 
 

@@ -3,36 +3,26 @@
 import { GuardedLink } from "@/components/navigation-guard";
 import { usePathname } from "next/navigation";
 
-const ITEMS = [
+const SIDE_ITEMS = [
   {
     href: "/cocuk/ana",
-    label: "Ana",
+    label: "Bugün",
     match: (path: string) => path === "/cocuk/ana" || path === "/cocuk",
     icon: HomeIcon,
   },
   {
-    href: "/cocuk/gunluk",
-    label: "Günlüğüm",
-    match: (path: string) => path.startsWith("/cocuk/gunluk"),
-    icon: JournalIcon,
-  },
-  {
     href: "/cocuk/haftam",
-    label: "Planım",
+    label: "Haftam",
     match: (path: string) =>
-      path.startsWith("/cocuk/haftam") || path.startsWith("/cocuk/plan"),
+      path.startsWith("/cocuk/haftam") ||
+      (path.startsWith("/cocuk/plan") && path !== "/cocuk/plan/yeni"),
     icon: PlanIcon,
-  },
-  {
-    href: "/cocuk/hedefler",
-    label: "Hedeflerim",
-    match: (path: string) => path.startsWith("/cocuk/hedefler"),
-    icon: GoalIcon,
   },
 ] as const;
 
 export function ChildNav() {
   const pathname = usePathname() || "";
+  const addActive = pathname === "/cocuk/plan/yeni";
 
   return (
     <nav
@@ -45,28 +35,55 @@ export function ChildNav() {
       }}
     >
       <ul className="mx-auto flex max-w-[480px] items-stretch justify-between gap-1">
-        {ITEMS.map((item) => {
-          const active = item.match(pathname);
-          const Icon = item.icon;
-          return (
-            <li key={item.href} className="flex-1">
-              <GuardedLink
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                className="flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-center text-xs font-semibold leading-tight"
-                style={{
-                  color: active ? "var(--accent)" : "var(--muted)",
-                  background: active ? "var(--accent-soft)" : "transparent",
-                }}
-              >
-                <Icon active={active} />
-                <span>{item.label}</span>
-              </GuardedLink>
-            </li>
-          );
-        })}
+        <li className="flex-1">
+          <SideLink item={SIDE_ITEMS[0]} pathname={pathname} />
+        </li>
+        <li className="flex w-[4.5rem] shrink-0 items-center justify-center">
+          <GuardedLink
+            href="/cocuk/plan/yeni"
+            aria-current={addActive ? "page" : undefined}
+            aria-label="Ekle"
+            className="flex min-h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-full text-xs font-semibold leading-tight"
+            style={{
+              color: addActive ? "white" : "var(--accent)",
+              background: addActive ? "var(--accent)" : "var(--accent-soft)",
+              border: addActive ? "none" : "1px solid var(--accent)",
+            }}
+          >
+            <PlusIcon />
+            <span>Ekle</span>
+          </GuardedLink>
+        </li>
+        <li className="flex-1">
+          <SideLink item={SIDE_ITEMS[1]} pathname={pathname} />
+        </li>
       </ul>
     </nav>
+  );
+}
+
+function SideLink({
+  item,
+  pathname,
+}: {
+  item: (typeof SIDE_ITEMS)[number];
+  pathname: string;
+}) {
+  const active = item.match(pathname);
+  const Icon = item.icon;
+  return (
+    <GuardedLink
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className="flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-center text-xs font-semibold leading-tight"
+      style={{
+        color: active ? "var(--accent)" : "var(--muted)",
+        background: active ? "var(--accent-soft)" : "transparent",
+      }}
+    >
+      <Icon active={active} />
+      <span>{item.label}</span>
+    </GuardedLink>
   );
 }
 
@@ -75,19 +92,6 @@ function HomeIcon({ active }: { active: boolean }) {
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
         d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"
-        stroke="currentColor"
-        strokeWidth={active ? 2.2 : 1.8}
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function JournalIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M7 3.5h9.5A2.5 2.5 0 0 1 19 6v14.5L12 17l-7 3.5V6A2.5 2.5 0 0 1 7.5 3.5"
         stroke="currentColor"
         strokeWidth={active ? 2.2 : 1.8}
         strokeLinejoin="round"
@@ -118,24 +122,15 @@ function PlanIcon({ active }: { active: boolean }) {
   );
 }
 
-function GoalIcon({ active }: { active: boolean }) {
+function PlusIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle
-        cx="12"
-        cy="12"
-        r="8"
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 5v14M5 12h14"
         stroke="currentColor"
-        strokeWidth={active ? 2.2 : 1.8}
+        strokeWidth={2.4}
+        strokeLinecap="round"
       />
-      <circle
-        cx="12"
-        cy="12"
-        r="4"
-        stroke="currentColor"
-        strokeWidth={active ? 2.2 : 1.8}
-      />
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
     </svg>
   );
 }

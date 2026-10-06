@@ -43,7 +43,8 @@ enum JournalEntryStatus {
   SAVED
 }
 
-/// NEW entries are GUARDIAN_VISIBLE; pre-M11 rows are LEGACY_PRIVATE.
+/// CHILD_PRIVATE semantics use LEGACY_PRIVATE (M12A default + pre-M11 rows).
+/// GUARDIAN_VISIBLE is historical M11-only; new creates are never this mode.
 enum JournalVisibility {
   LEGACY_PRIVATE
   GUARDIAN_VISIBLE
@@ -58,6 +59,37 @@ enum AppNotificationKind {
   PLAN_SCHEDULE_CHANGED
   PLAN_STEP_COMPLETED
   PLAN_EXTRACT_BATCH
+  HELP_REQUEST_CREATED
+  HELP_OFFER_CREATED
+  HELP_OFFER_ACCEPTED
+  HELP_REQUEST_CANCELLED
+  HELP_SESSION_COMPLETED
+  HELP_OFFER_UPDATED
+  HELP_OFFER_WITHDRAWN
+  HELP_ACCEPTED_CANCELLED
+  HELP_REQUEST_REOPENED
+}
+
+enum HelpType {
+  DO_TOGETHER
+  EXPLAIN
+  REVIEW
+  OTHER
+}
+
+enum HelpRequestStatus {
+  OPEN
+  OFFERED
+  ACCEPTED
+  COMPLETED
+  CANCELLED
+}
+
+enum HelpOfferStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
 }
 
 enum JournalAiJobStatus {
@@ -108,6 +140,7 @@ model User {
   createdGuardianInvites   GuardianInvitation[]  @relation("GuardianInviteCreator")
   shareRecipients          PublishedShareRecipient[]
   appNotifications         AppNotification[]
+  helpOffers               HelpOffer[]
 }
 
 model Session {
@@ -205,6 +238,7 @@ model ChildProfile {
   pushSubscriptions ChildPushSubscription[]
   reminderOccurrences ReminderOccurrence[]
   reminderDayBuckets ReminderDayBucket[]
+  helpRequests HelpRequest[]
 
   @@index([familyId])
 }
@@ -274,7 +308,8 @@ model RateLimitBucket {
   updatedAt   DateTime @updatedAt
 }
 
-/// Journal writing. LEGACY_PRIVATE keeps M2–M10 privacy; GUARDIAN_VISIBLE is the M11 model.
+/// Journal writing. New rows default to LEGACY_PRIVATE (child-private).
+/// GUARDIAN_VISIBLE rows are frozen historical M11 semantics only.
 model JournalEntry {
   id              String             @id @default(cuid())
   childId         String
@@ -288,7 +323,7 @@ model JournalEntry {
   /// Last accepted AI summary text (child-facing optional). Empty if none accepted.
   acceptedSummary String             @default("")
   status          JournalEntryStatus @default(DRAFT)
-  visibility      JournalVisibility  @default(GUARDIAN_VISIBLE)
+  visibility      JournalVisibility  @default(LEGACY_PRIVATE)
   revision        Int                @default(1)
   /// Optional client key so create retries do not insert duplicates.
   clientRequestId String?            @unique
@@ -573,6 +608,7 @@ model PlanCommitment {
 
   child      ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
   studySteps PlanStudyStep[]
+  helpRequests HelpRequest[]
 
   @@index([childId, eventDate])
   @@index([childId, dueDate])
@@ -608,6 +644,7 @@ model PlanStudyStep {
   relatedCommitment PlanCommitment? @relation(fields: [relatedCommitmentId], references: [id], onDelete: SetNull)
   relatedGoal       PlanGoal?       @relation(fields: [relatedGoalId], references: [id], onDelete: SetNull)
   reminderOccurrences ReminderOccurrence[]
+  helpRequests HelpRequest[]
 
   @@index([childId, plannedDate])
   @@index([childId, status])
@@ -786,4 +823,59 @@ model PlanExtractCandidate {
 
   @@unique([batchId, ordinal])
   @@index([batchId])
+}
+
+/// Child-initiated help request attached to a child-owned plan item (M12B).
+model HelpRequest {
+  id              String            @id @default(cuid())
+  childId         String
+  /// Exactly one of studyStepId / commitmentId must be set (enforced in app).
+  studyStepId     String?
+  commitmentId    String?
+  helpType        HelpType
+  /// Explicit child note only — never journal body.
+  note            String            @default("")
+  status          HelpRequestStatus @default(OPEN)
+  acceptedOfferId String?           @unique
+  /// Set when an ACCEPTED session is invalidated (guardian cancel / plan schedule change); cleared on next accept/cancel/complete.
+  sessionInvalidatedAt DateTime?
+  cancelledAt     DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  child      ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  studyStep  PlanStudyStep?  @relation(fields: [studyStepId], references: [id], onDelete: Cascade)
+  commitment PlanCommitment? @relation(fields: [commitmentId], references: [id], onDelete: Cascade)
+  offers     HelpOffer[]
+  acceptedOffer HelpOffer?   @relation("AcceptedHelpOffer", fields: [acceptedOfferId], references: [id], onDelete: SetNull)
+
+  @@index([childId, status, createdAt])
+  @@index([studyStepId])
+  @@index([commitmentId])
+}
+
+/// Guardian offer of help for a child's request. Child chooses among pending offers.
+model HelpOffer {
+  id                String          @id @default(cuid())
+  requestId         String
+  guardianUserId    String
+  /// Calendar date of proposed help session.
+  proposedDate      DateTime        @db.Date
+  /// Local wall time in the child's time zone ("HH:mm").
+  proposedTimeLocal String
+  note              String          @default("")
+  status            HelpOfferStatus @default(PENDING)
+  withdrawnAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  request          HelpRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  guardian         User        @relation(fields: [guardianUserId], references: [id], onDelete: Cascade)
+  acceptedForRequest HelpRequest? @relation("AcceptedHelpOffer")
+
+  @@unique([requestId, guardianUserId])
+  @@index([guardianUserId, status])
+  @@index([requestId, status])
+  @@index([proposedDate])
 }

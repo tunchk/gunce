@@ -44,13 +44,10 @@ test("create step → Pano Başla → Tamamladım → Hafta agrees", async ({ br
   await page.getByRole("button", { name: "Kaydet" }).click();
   await expect(page.getByText(/Kaydedildi/)).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Haftalık plana git" }).click();
-  await expect(page.getByRole("heading", { name: "Planım" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Haftam" })).toBeVisible({ timeout: 15_000 });
 
-  await page.getByRole("tab", { name: "Pano" }).click();
-  await expect(page.getByRole("tab", { name: "Pano" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await page.getByRole("link", { name: "Duruma göre (Pano)" }).click();
+  await expect(page.getByRole("link", { name: "Hafta takvimine dön" })).toBeVisible();
 
   const statusTabs = page.getByRole("tablist", { name: "Pano sütunları" });
   await expect(page.getByText("Pano deneme adımı").first()).toBeVisible();
@@ -71,11 +68,8 @@ test("create step → Pano Başla → Tamamladım → Hafta agrees", async ({ br
     timeout: 10_000,
   });
 
-  await page.getByRole("tab", { name: "Hafta" }).click();
-  await expect(page.getByRole("tab", { name: "Hafta" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await page.getByRole("link", { name: "Hafta takvimine dön" }).click();
+  await expect(page.getByRole("link", { name: "Duruma göre (Pano)" })).toBeVisible();
   await expect(page.getByText("Pano deneme adımı").first()).toBeVisible();
   await expect(page.getByText("Tamamlandı").first()).toBeVisible();
 
@@ -83,7 +77,7 @@ test("create step → Pano Başla → Tamamladım → Hafta agrees", async ({ br
   await expect(page.getByText("Tamamlandı").first()).toBeVisible({ timeout: 10_000 });
   await page.getByRole("link", { name: "Planıma dön" }).click();
 
-  await page.getByRole("tab", { name: "Pano" }).click();
+  await page.getByRole("link", { name: "Duruma göre (Pano)" }).click();
   await page.getByRole("tablist", { name: "Pano sütunları" }).getByRole("tab", { name: /Tamamlandı/ }).click();
   await expect(page.getByText("Pano deneme adımı").first()).toBeVisible();
 

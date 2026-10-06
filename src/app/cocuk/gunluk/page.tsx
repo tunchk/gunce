@@ -33,7 +33,7 @@ export default async function JournalListPage() {
   return (
     <Shell
       title="Günlüğüm"
-      subtitle="Yeni kayıtlarını velilerin görebilir. Eski özel yazılar yalnızca paylaşınca görünür."
+      subtitle="Yeni yazıların özel kalır. Paylaşmak istersen açık onay verirsin."
       withChildNav
       headerAction={<ChildSettingsLink />}
     >
@@ -45,10 +45,10 @@ export default async function JournalListPage() {
         {entries.length === 0 ? (
           <Panel>
             <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-              Henüz bir yazın yok. “Günümü anlat” ile başlayabilirsin.
+              Henüz bir yazın yok. Yeni yazı ile başlayabilirsin.
             </p>
             <Link href="/cocuk/gunluk/yeni" className="mt-3 block">
-              <Button variant="secondary">Günümü anlat</Button>
+              <Button variant="secondary">Yeni yazı</Button>
             </Link>
           </Panel>
         ) : (

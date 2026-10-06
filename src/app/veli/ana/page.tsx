@@ -7,12 +7,8 @@ import { NotificationBell } from "@/components/notification-bell";
 import { ParentSharedSections } from "@/components/parent-shared-sections";
 import { Button, Panel, Shell } from "@/components/ui";
 import { avatarEmoji } from "@/lib/constants";
-import {
-  excerptSharedText,
-  formatDiaryDate,
-  listParentSharedContent,
-  listParentVisibleEntries,
-} from "@/lib/journal";
+import { listParentSharedContent } from "@/lib/journal";
+import { listParentHelpInbox } from "@/lib/help";
 import { getParentWeekPlan } from "@/lib/plan";
 import { getParentGoals } from "@/lib/goal";
 import { formatDayLabelTr } from "@/lib/plan-dates";
@@ -30,24 +26,23 @@ export default async function ParentHomePage() {
 
   const child = ctx.child;
 
-  const [shared, visible, plan, goalsData] = await Promise.all([
+  const [shared, plan, goalsData, helpInbox] = await Promise.all([
     listParentSharedContent(session.user.id),
-    listParentVisibleEntries(session.user.id, child.id),
     getParentWeekPlan(session.user.id),
     getParentGoals(session.user.id),
+    listParentHelpInbox(session.user.id, child.id),
   ]);
 
   const messages = shared.messages.filter((m) => m.childId === child.id);
   const supportRequests = shared.supportRequests.filter((m) => m.childId === child.id);
-  // Avoid duplicate cards when a legacy share also exists for the same entry.
-  const legacyEntryIds = new Set([
-    ...messages.map((m) => m.entryId),
-    ...supportRequests.map((m) => m.entryId),
-  ]);
-  const visibleOnly = visible.filter((v) => !legacyEntryIds.has(v.entryId));
 
   const childPlan = plan.children.find((c) => c.childId === child.id);
-  const upcoming: { label: string; title: string; date: string }[] = [];
+  const upcoming: {
+    label: string;
+    title: string;
+    date: string;
+    href: string;
+  }[] = [];
   if (childPlan) {
     for (const day of childPlan.days) {
       for (const c of day.commitments) {
@@ -56,6 +51,16 @@ export default async function ParentHomePage() {
           label: commitmentTypeLabel(c.type),
           title: c.title,
           date: day.date,
+          href: `/veli/plan/is/${c.id}`,
+        });
+      }
+      for (const s of day.studySteps) {
+        if (s.status === "DONE") continue;
+        upcoming.push({
+          label: "Çalışma",
+          title: s.title,
+          date: day.date,
+          href: `/veli/plan/adim/${s.id}`,
         });
       }
     }
@@ -68,7 +73,7 @@ export default async function ParentHomePage() {
   return (
     <Shell
       title={`Merhaba, ${session.user.name}`}
-      subtitle="Çocuğunun kaydettiği yeni günlükler ve onaylı eski paylaşımlar burada."
+      subtitle="Yaklaşan plan ve çocuğunun seninle paylaştıkları."
       wide
       headerAction={
         <div className="flex items-center gap-2">
@@ -109,51 +114,44 @@ export default async function ParentHomePage() {
           </div>
         </Panel>
 
-        <Panel>
-          <h2 className="text-lg font-semibold">Son günlükler</h2>
-          <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            Yeni modelde kaydedilen anlatımlar. Özel eski kayıtlar burada görünmez.
-          </p>
-          {visibleOnly.length === 0 ? (
-            <p className="mt-3 text-sm" style={{ color: "var(--muted)" }}>
-              Henüz görünen yeni günlük yok.
-            </p>
-          ) : (
+        {helpInbox.waiting.length > 0 ? (
+          <Panel>
+            <h2 className="text-lg font-semibold">Yardım bekleyen</h2>
             <ul className="mt-3 space-y-3">
-              {visibleOnly.slice(0, 5).map((item) => (
-                <li
-                  key={item.entryId}
-                  className="rounded-2xl border p-4"
-                  style={{ borderColor: "var(--line)" }}
-                >
-                  <p className="text-xs" style={{ color: "var(--muted)" }}>
-                    {formatDiaryDate(new Date(`${item.diaryDate}T00:00:00.000Z`))}
-                  </p>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
-                    {excerptSharedText(item.body)}
-                  </p>
-                  <Link
-                    href={`/veli/gunluk/${item.entryId}`}
-                    className="mt-3 inline-flex min-h-11 items-center justify-center rounded-2xl px-4 text-sm font-semibold"
-                    style={{ background: "var(--accent-soft)" }}
-                  >
-                    Detayı gör
+              {helpInbox.waiting.slice(0, 3).map((r) => (
+                <li key={r.id} className="text-sm leading-relaxed">
+                  <p className="font-medium">{r.planItem.title}</p>
+                  <p style={{ color: "var(--muted)" }}>{r.helpTypeLabel}</p>
+                  <Link href={`/veli/yardim/${r.id}`} className="mt-2 inline-block">
+                    <Button variant="secondary">Yardım edebilirim</Button>
                   </Link>
                 </li>
               ))}
             </ul>
-          )}
-        </Panel>
-
-        <ParentSharedSections
-          messages={messages}
-          supportRequests={supportRequests}
-        />
+            <div className="mt-4">
+              <Link href="/veli/yardim">
+                <Button variant="ghost">Tüm yardımları gör</Button>
+              </Link>
+            </div>
+          </Panel>
+        ) : (
+          <Panel>
+            <h2 className="text-lg font-semibold">Yardım</h2>
+            <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+              Bekleyen yardım isteği yok.
+            </p>
+            <div className="mt-4">
+              <Link href="/veli/yardim">
+                <Button variant="secondary">Yardım alanına git</Button>
+              </Link>
+            </div>
+          </Panel>
+        )}
 
         <Panel>
-          <h2 className="text-lg font-semibold">Haftanın planı</h2>
+          <h2 className="text-lg font-semibold">Yaklaşan plan</h2>
           <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            Salt okunur. Günlük yazıları buraya karışmaz.
+            Salt okunur. Günlük yazıları buraya karışmaz; tamamlanma notları çocuğa özeldir.
           </p>
           {childPlan ? (
             <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
@@ -162,16 +160,18 @@ export default async function ParentHomePage() {
           ) : null}
           {upcoming.length === 0 ? (
             <p className="mt-3 text-sm" style={{ color: "var(--muted)" }}>
-              Bu hafta için listelenecek ödev, sınav veya etkinlik yok.
+              Bu hafta için listelenecek ödev, sınav veya çalışma adımı yok.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
-              {upcoming.slice(0, 3).map((item) => (
+              {upcoming.slice(0, 6).map((item) => (
                 <li
-                  key={`${item.date}-${item.title}`}
+                  key={`${item.href}-${item.date}`}
                   className="text-sm leading-relaxed"
                 >
-                  <span className="font-medium">{item.label}:</span> {item.title}{" "}
+                  <Link href={item.href} className="font-medium underline">
+                    {item.label}: {item.title}
+                  </Link>{" "}
                   <span style={{ color: "var(--muted)" }}>
                     ({formatDayLabelTr(item.date)})
                   </span>
@@ -185,6 +185,11 @@ export default async function ParentHomePage() {
             </Link>
           </div>
         </Panel>
+
+        <ParentSharedSections
+          messages={messages}
+          supportRequests={supportRequests}
+        />
 
         <Panel>
           <h2 className="text-lg font-semibold">Hedefler</h2>

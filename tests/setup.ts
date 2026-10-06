@@ -60,6 +60,8 @@ beforeEach(async () => {
     );
   }
 
+  await prisma.helpOffer.deleteMany();
+  await prisma.helpRequest.deleteMany();
   await prisma.parentGuidance.deleteMany();
   await prisma.publishedShareRecipient.deleteMany();
   await prisma.appNotification.deleteMany();

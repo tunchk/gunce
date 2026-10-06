@@ -130,12 +130,12 @@ npm run build && npm run test:e2e  # Playwright; Chromium gerekir (next start g�
 
 1. Veli kaydı → çocuk profili → davet kodu.
 2. Ayrı profil/cihazda çocuk eşleştirmesi ve onboarding.
-3. Çocuk: **Günümü anlat** → konu seç → yaz (veya mikrofon; `OPENAI_API_KEY` gerekir). Kaydet → “Kaydedildi · Velilerin görebilir”. **Bitirdim** yayın değildir.
-4. Veli: bildirim zili → okunmamış → tam anlatımı `/veli/gunluk/...` içinde gör. Yayın / alıcı seçimi yok.
-5. Eski (legacy) kayıtlar için çocuk hâlâ **Paylaşımı hazırla** akışını kullanabilir; özel metin paylaşılmadan görünmez.
-6. İkinci veli davetini kabul et → yeni-model geçmişi okuyabilir; eski özel metin ve tarihsel bildirim seli yok.
-7. Çocuk: **Plan ekle** → başarı ekranında kayda git. Alt gezinti: Ana · Günlüğüm · Planım · Hedeflerim (bildirim zili ana/ayarlarda).
-8. Veli ana: son günlükler + onaylı legacy paylaşımlar (aynı kaynak için tek kart).
+3. Çocuk: **Günlüğüm** / **Yeni yazı** → konu seç → yaz. Kaydet → özel kalır (“Bende kalacak · özel”). **Bitirdim** yayın değildir; paylaşmak için açık onay gerekir.
+4. Veli: özel günlük gövdesini görmez. Onaylı paylaşım varsa ana sayfada / paylaşım detayında görür. Tarihsel `GUARDIAN_VISIBLE` kayıtlar hâlâ `/veli/gunluk/...` ile okunabilir.
+5. Paylaşım: çocuk **Paylaşımı hazırla** → veliye gidecek metin; özel günlük metni paylaşılmadan görünmez.
+6. İkinci veli davetini kabul et → tarihsel görünür kayıtları okuyabilir; özel metin ve bildirim seli yok.
+7. Çocuk: alt gezinti **Bugün · Ekle · Haftam**. Günlük ve hedefler ikincil bağlantılar. Pano, Haftam içinde “Duruma göre”. Plan kaydından **Yardım iste**; veli `/veli/yardim` → teklif; çocuk kabul eder.
+8. Veli ana: **Yaklaşan plan** önce; yardım bekleyen özeti; onaylı paylaşımlar altında. Tamamlanma notları çocuğa özeldir.
 9. Hatırlatmalar: çocuk **Ayarlar** → Hatırlatmalar; uygulama içi merkez push olmadan da öğe gösterebilir.
 10. Veli: kayıt sonrası doğrulama e-postası (isteğe bağlı); **Şifremi unuttum** → yenileme. Yerel: `GUNCE_MAIL_PREVIEW=1` ile `.mail-preview/` dosyalarını aç.
 
